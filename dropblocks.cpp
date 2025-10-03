@@ -1264,7 +1264,7 @@ struct AudioSystem {
     }
     
     void playTensionSound(int filledRows) {
-        if (!enableAmbientSounds || filledRows < 3) return;
+        if (!enableAmbientSounds || filledRows < 5) return;
         Uint32 now = SDL_GetTicks();
         if (now - lastTension > 1000) {
             playBeep(80.0, 300, 0.08f * ambientVolume, true);
