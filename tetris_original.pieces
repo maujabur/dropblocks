@@ -1,0 +1,63 @@
+[SET]
+NAME = Tetris Original
+PREVIEWGRID = 4
+
+[RANDOMIZER]
+TYPE = bag
+BAGSIZE = 7
+
+[PIECE.I]
+NAME = I-Piece
+COLOR = #00FFFF
+ROTATIONS = auto
+BASE = (0,0);(1,0);(2,0);(3,0)
+KICKS.CW = (0,0);(-2,0);(1,0);(-2,-1);(1,2)
+KICKS.CCW = (0,0);(-1,0);(2,0);(-1,2);(2,-1)
+
+[PIECE.O]
+NAME = O-Piece
+COLOR = #FFFF00
+ROTATIONS = auto
+BASE = (0,0);(1,0);(0,1);(1,1)
+KICKS.CW = (0,0)
+KICKS.CCW = (0,0)
+
+[PIECE.T]
+NAME = T-Piece
+COLOR = #800080
+ROTATIONS = auto
+BASE = (0,0);(-1,0);(1,0);(0,1)
+KICKS.CW = (0,0);(-1,0);(-1,1);(0,-2);(-1,-2)
+KICKS.CCW = (0,0);(1,0);(1,1);(0,-2);(1,-2)
+
+[PIECE.S]
+NAME = S-Piece
+COLOR = #00FF00
+ROTATIONS = auto
+BASE = (0,0);(1,0);(0,1);(-1,1)
+KICKS.CW = (0,0);(1,0);(1,1);(0,-2);(1,-2)
+KICKS.CCW = (0,0);(1,0);(1,-1);(0,2);(1,2)
+
+[PIECE.Z]
+NAME = Z-Piece
+COLOR = #FF0000
+ROTATIONS = auto
+BASE = (0,0);(-1,0);(0,1);(1,1)
+KICKS.CW = (0,0);(-1,0);(-1,-1);(0,2);(-1,2)
+KICKS.CCW = (0,0);(1,0);(1,-1);(0,2);(1,2)
+
+[PIECE.J]
+NAME = J-Piece
+COLOR = #0000FF
+ROTATIONS = auto
+BASE = (0,0);(-1,0);(1,0);(1,1)
+KICKS.CW = (0,0);(1,0);(1,1);(0,-2);(1,-2)
+KICKS.CCW = (0,0);(1,0);(1,-1);(0,2);(1,2)
+
+[PIECE.L]
+NAME = L-Piece
+COLOR = #FFA500
+ROTATIONS = auto
+BASE = (0,0);(-1,0);(1,0);(-1,1)
+KICKS.CW = (0,0);(-1,0);(-1,1);(0,-2);(-1,-2)
+KICKS.CCW = (0,0);(1,0);(1,1);(0,-2);(1,-2)
