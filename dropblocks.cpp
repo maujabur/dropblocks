@@ -9,6 +9,8 @@
  * Features advanced visual effects, customizable themes, and multiple piece sets.
  * 
  * @section controls Controls
+ * 
+ * KEYBOARD:
  * - ← → : Move piece left/right
  * - ↓ : Soft drop
  * - Z/↑ : Rotate counter-clockwise
@@ -18,6 +20,19 @@
  * - ENTER : Restart (after Game Over)
  * - ESC : Quit
  * - F12 : Screenshot
+ * 
+ * JOYSTICK/CONTROLLER:
+ * - D-pad Left/Right : Move piece left/right
+ * - D-pad Down : Soft drop
+ * - D-pad Up : Rotate (CCW/CW)
+ * - A/X Button : Rotate counter-clockwise
+ * - B/Circle Button : Rotate clockwise
+ * - X/Square Button : Soft drop
+ * - Y/Triangle Button : Hard drop
+ * - Start Button : Restart (after Game Over)
+ * - Back/Select Button : Pause
+ * - Analog sticks : Movement and rotation with deadzone
+ * - Guide/PS Button : Disabled in kiosk mode
  * 
  * @section build Build
  * g++ dropblocks.cpp -o dropblocks `sdl2-config --cflags --libs` -O2
@@ -431,10 +446,12 @@ static bool processThemeColors(const std::string& key, const std::string& val, i
     return false;
 }
 
-// Declaração forward para AudioSystem
+// Declaração forward para AudioSystem e JoystickSystem
 struct AudioSystem;
+struct JoystickSystem;
 
 static bool processAudioConfigs(const std::string& key, const std::string& val, int& processedLines, AudioSystem& audio);
+static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick);
 
 static bool processSpecialConfigs(const std::string& key, const std::string& val, int& processedLines) {
     // Configurações especiais
@@ -497,7 +514,7 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
     return false;
 }
 
-static void loadConfigFromStream(std::istream& in, AudioSystem& audio) {
+static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickSystem& joystick) {
     std::string line;
     int lineNum = 0;
     int processedLines = 0;
@@ -538,14 +555,15 @@ static void loadConfigFromStream(std::istream& in, AudioSystem& audio) {
         if (processBasicConfigs(KEY, val, processedLines)) continue;
         if (processThemeColors(KEY, val, processedLines)) continue;
         if (processAudioConfigs(KEY, val, processedLines, audio)) continue;
+        if (processJoystickConfigs(KEY, val, processedLines, joystick)) continue;
         if (processSpecialConfigs(KEY, val, processedLines)) continue;
         
         // Linha não reconhecida
         skippedLines++;
     }
 }
-static bool loadConfigPath(const std::string& p, AudioSystem& audio){
-    std::ifstream f(p.c_str()); if(f.good()){ loadConfigFromStream(f, audio); return true; } return false;
+static bool loadConfigPath(const std::string& p, AudioSystem& audio, JoystickSystem& joystick){
+    std::ifstream f(p.c_str()); if(f.good()){ loadConfigFromStream(f, audio, joystick); return true; } return false;
 }
 /**
  * @brief Load configuration file
@@ -558,29 +576,29 @@ static bool loadConfigPath(const std::string& p, AudioSystem& audio){
  * 
  * @param audio Audio system reference for audio configuration
  */
-static void loadConfigFile(AudioSystem& audio){
+static void loadConfigFile(AudioSystem& audio, JoystickSystem& joystick){
     if(const char* env = std::getenv("DROPBLOCKS_CFG")){ 
-        if(loadConfigPath(env, audio)) { 
+        if(loadConfigPath(env, audio, joystick)) { 
             printf("INFO: Config carregado de: %s\n", env); 
             return; 
         } 
     }
-    if(loadConfigPath("default.cfg", audio)) { 
+    if(loadConfigPath("default.cfg", audio, joystick)) { 
         printf("INFO: Config carregado de: default.cfg\n"); 
         return; 
     }
-    if(loadConfigPath("dropblocks.cfg", audio)) { 
+    if(loadConfigPath("dropblocks.cfg", audio, joystick)) { 
         printf("INFO: Config carregado de: dropblocks.cfg\n"); 
         return; 
     } // fallback para compatibilidade
     if(const char* home = std::getenv("HOME")){
         std::string p = std::string(home) + "/.config/default.cfg";
-        if(loadConfigPath(p, audio)) { 
+        if(loadConfigPath(p, audio, joystick)) { 
             printf("INFO: Config carregado de: %s\n", p.c_str()); 
             return; 
         }
         std::string p2 = std::string(home) + "/.config/dropblocks.cfg";
-        if(loadConfigPath(p2, audio)) { 
+        if(loadConfigPath(p2, audio, joystick)) { 
             printf("INFO: Config carregado de: %s\n", p2.c_str()); 
             return; 
         }
@@ -1329,6 +1347,7 @@ static bool processAudioConfigs(const std::string& key, const std::string& val, 
     return false;
 }
 
+
 // Implementação da função rotateWithKicks
 static void rotateWithKicks(Active& act, const std::vector<std::vector<Cell>>& grid, int dir, AudioSystem& audio){ // +1 = CW, -1 = CCW
     int from = act.rot;
@@ -1394,6 +1413,245 @@ struct ComboSystem {
         lastClear = 0;
     }
 };
+
+// Estrutura para sistema de joystick
+struct JoystickSystem {
+    SDL_Joystick* joystick = nullptr;
+    SDL_GameController* controller = nullptr;
+    int joystickId = -1;
+    bool isConnected = false;
+    
+    // Configurações de mapeamento
+    int buttonLeft = 13;      // D-pad left (padrão)
+    int buttonRight = 11;     // D-pad right (padrão)
+    int buttonDown = 14;      // D-pad down (padrão)
+    int buttonUp = 12;        // D-pad up (padrão)
+    int buttonRotateCCW = 0;  // A button (padrão)
+    int buttonRotateCW = 1;   // B button (padrão)
+    int buttonSoftDrop = 2;   // X button (padrão)
+    int buttonHardDrop = 3;   // Y button (padrão)
+    int buttonPause = 6;      // Back button (padrão)
+    int buttonStart = 7;      // Start button (padrão)
+    int buttonQuit = 8;       // Guide button (padrão)
+    
+    // Configurações de analógico
+    float analogDeadzone = 0.3f;  // Zona morta para analógico
+    float analogSensitivity = 1.0f; // Sensibilidade do analógico
+    
+    // Estado dos botões (para detecção de pressionamento)
+    bool buttonStates[32] = {false};
+    bool lastButtonStates[32] = {false};
+    
+    // Estado do analógico
+    float leftStickX = 0.0f;
+    float leftStickY = 0.0f;
+    float rightStickX = 0.0f;
+    float rightStickY = 0.0f;
+    
+    // Timers para repetição de movimento
+    Uint32 lastMoveTime = 0;
+    Uint32 moveRepeatDelay = 200; // ms entre movimentos repetidos (aumentado)
+    Uint32 lastSoftDropTime = 0;
+    Uint32 softDropRepeatDelay = 100; // ms entre soft drops repetidos
+    
+    bool initialize() {
+        // Tentar conectar um joystick
+        int numJoysticks = SDL_NumJoysticks();
+        if (numJoysticks > 0) {
+            // Tentar usar como game controller primeiro
+            if (SDL_IsGameController(0)) {
+                controller = SDL_GameControllerOpen(0);
+                if (controller) {
+                    joystick = SDL_GameControllerGetJoystick(controller);
+                    joystickId = 0;
+                    isConnected = true;
+                    printf("Game controller connected: %s\n", SDL_GameControllerName(controller));
+                    return true;
+                }
+            }
+            
+            // Fallback para joystick genérico
+            joystick = SDL_JoystickOpen(0);
+            if (joystick) {
+                joystickId = 0;
+                isConnected = true;
+                printf("Joystick connected: %s\n", SDL_JoystickName(joystick));
+                return true;
+            }
+        }
+        
+        printf("No joystick/controller found\n");
+        return false;
+    }
+    
+    void update() {
+        if (!isConnected) return;
+        
+        // Atualizar estado dos botões
+        for (int i = 0; i < 32; i++) {
+            lastButtonStates[i] = buttonStates[i];
+            if (controller) {
+                buttonStates[i] = SDL_GameControllerGetButton(controller, (SDL_GameControllerButton)i);
+            } else if (joystick) {
+                buttonStates[i] = SDL_JoystickGetButton(joystick, i);
+            }
+        }
+        
+        // Atualizar analógico
+        if (controller) {
+            leftStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX) / 32767.0f;
+            leftStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY) / 32767.0f;
+            rightStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f;
+            rightStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
+        } else if (joystick) {
+            leftStickX = SDL_JoystickGetAxis(joystick, 0) / 32767.0f;
+            leftStickY = SDL_JoystickGetAxis(joystick, 1) / 32767.0f;
+            if (SDL_JoystickNumAxes(joystick) > 2) {
+                rightStickX = SDL_JoystickGetAxis(joystick, 2) / 32767.0f;
+                rightStickY = SDL_JoystickGetAxis(joystick, 3) / 32767.0f;
+            }
+        }
+        
+        // Aplicar zona morta
+        if (std::abs(leftStickX) < analogDeadzone) leftStickX = 0.0f;
+        if (std::abs(leftStickY) < analogDeadzone) leftStickY = 0.0f;
+        if (std::abs(rightStickX) < analogDeadzone) rightStickX = 0.0f;
+        if (std::abs(rightStickY) < analogDeadzone) rightStickY = 0.0f;
+    }
+    
+    bool isButtonPressed(int button) {
+        if (button < 0 || button >= 32) return false;
+        return buttonStates[button] && !lastButtonStates[button];
+    }
+    
+    bool isButtonHeld(int button) {
+        if (button < 0 || button >= 32) return false;
+        return buttonStates[button];
+    }
+    
+    bool shouldMoveLeft() {
+        return isButtonPressed(buttonLeft) || 
+               (leftStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) ||
+               (leftStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
+    }
+    
+    bool shouldMoveRight() {
+        return isButtonPressed(buttonRight) || 
+               (leftStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) ||
+               (leftStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
+    }
+    
+    bool shouldMoveDown() {
+        return isButtonPressed(buttonDown) || 
+               (leftStickY > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN));
+    }
+    
+    bool shouldSoftDrop() {
+        bool dpadDown = (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN));
+        bool analogDown = (leftStickY > analogDeadzone && SDL_GetTicks() - lastSoftDropTime > softDropRepeatDelay);
+        bool buttonPressed = isButtonPressed(buttonSoftDrop);
+        
+        if (dpadDown || analogDown || buttonPressed) {
+            lastSoftDropTime = SDL_GetTicks();
+            return true;
+        }
+        return false;
+    }
+    
+    bool shouldRotateCCW() {
+        return isButtonPressed(buttonRotateCCW) || 
+               (rightStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)) ||
+               (leftStickY < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
+    }
+    
+    bool shouldRotateCW() {
+        return isButtonPressed(buttonRotateCW) || 
+               (rightStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)) ||
+               (leftStickY < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
+    }
+    
+    void resetMoveTimer() {
+        lastMoveTime = SDL_GetTicks();
+    }
+    
+    void cleanup() {
+        if (controller) {
+            SDL_GameControllerClose(controller);
+            controller = nullptr;
+        }
+        if (joystick) {
+            SDL_JoystickClose(joystick);
+            joystick = nullptr;
+        }
+        isConnected = false;
+    }
+};
+
+// Implementação da função processJoystickConfigs
+static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick) {
+    auto seti = [&](const char* K, int& ref) { 
+        if (key == K) { 
+            int v = std::atoi(val.c_str());
+            if (v >= 0 && v < 32) {
+                ref = v; 
+                return true; 
+            }
+        } 
+        return false; 
+    };
+    auto setf = [&](const char* K, float& ref) { 
+        if (key == K) { 
+            float v = (float)std::atof(val.c_str());
+            if (v >= 0.0f && v <= 1.0f) {
+                ref = v; 
+                return true; 
+            }
+        } 
+        return false; 
+    };
+
+    // Configurações de mapeamento de botões
+    if (seti("JOYSTICK_BUTTON_LEFT", joystick.buttonLeft)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_RIGHT", joystick.buttonRight)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_DOWN", joystick.buttonDown)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_UP", joystick.buttonUp)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_ROTATE_CCW", joystick.buttonRotateCCW)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_ROTATE_CW", joystick.buttonRotateCW)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_SOFT_DROP", joystick.buttonSoftDrop)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_HARD_DROP", joystick.buttonHardDrop)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_PAUSE", joystick.buttonPause)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_START", joystick.buttonStart)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_QUIT", joystick.buttonQuit)) { processedLines++; return true; }
+    
+    // Configurações de analógico
+    if (setf("JOYSTICK_ANALOG_DEADZONE", joystick.analogDeadzone)) { processedLines++; return true; }
+    if (setf("JOYSTICK_ANALOG_SENSITIVITY", joystick.analogSensitivity)) { processedLines++; return true; }
+    
+    // Configurações de timing
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY") {
+        int v = std::atoi(val.c_str());
+        if (v >= 50 && v <= 1000) {
+            joystick.moveRepeatDelay = v;
+            processedLines++;
+            return true;
+        }
+    }
+    if (key == "JOYSTICK_SOFT_DROP_DELAY") {
+        int v = std::atoi(val.c_str());
+        if (v >= 50 && v <= 500) {
+            joystick.softDropRepeatDelay = v;
+            processedLines++;
+            return true;
+        }
+    }
+    
+    return false;
+}
 
 // Estrutura para estado do jogo
 struct GameState {
@@ -1539,7 +1797,10 @@ static void processPieceFall(GameState& state, AudioSystem& audio) {
     }
 }
 
-static void handleInput(GameState& state, AudioSystem& audio, SDL_Renderer* ren) {
+static void handleInput(GameState& state, AudioSystem& audio, SDL_Renderer* ren, JoystickSystem& joystick) {
+    // Atualizar estado do joystick
+    joystick.update();
+    
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) state.running = false;
@@ -1602,6 +1863,78 @@ static void handleInput(GameState& state, AudioSystem& audio, SDL_Renderer* ren)
             }
         }
     }
+    
+    // Processar controles de joystick (sempre, exceto para movimento durante pause)
+    if (joystick.isConnected) {
+        // Controles que funcionam sempre (pause, quit, etc.)
+        if (joystick.isButtonPressed(joystick.buttonPause)) {
+            state.paused = !state.paused;
+            audio.playBeep(state.paused ? 440.0 : 520.0, 30, 0.12f, false);
+        }
+        
+        // Quit removido para uso em kiosk
+        // if (joystick.isButtonPressed(joystick.buttonQuit)) {
+        //     state.running = false;
+        // }
+        
+        // Controles de jogo (só funcionam quando não pausado)
+        if (!state.paused) {
+            auto coll = [&](int dx, int dy, int drot) { return collides(state.act, state.grid, dx, dy, drot); };
+            
+            // Movimento esquerda
+            if (joystick.shouldMoveLeft() && !coll(-1, 0, 0)) {
+                state.act.x--;
+                audio.playMovementSound();
+                joystick.resetMoveTimer();
+            }
+            
+            // Movimento direita
+            if (joystick.shouldMoveRight() && !coll(1, 0, 0)) {
+                state.act.x++;
+                audio.playMovementSound();
+                joystick.resetMoveTimer();
+            }
+            
+            // Soft drop
+            if (joystick.shouldSoftDrop()) {
+                audio.playSoftDropSound();
+                processPieceFall(state, audio);
+            }
+            
+            // Hard drop
+            if (joystick.isButtonPressed(joystick.buttonHardDrop)) {
+                while (!coll(0, 1, 0)) state.act.y++;
+                state.score += 2; // Bonus por hard drop
+                audio.playHardDropSound();
+                processPieceFall(state, audio);
+            }
+            
+            // Rotação CCW
+            if (joystick.shouldRotateCCW()) {
+                rotateWithKicks(state.act, state.grid, -1, audio);
+                audio.playRotationSound(false);  // CCW
+                joystick.resetMoveTimer();
+            }
+            
+            // Rotação CW
+            if (joystick.shouldRotateCW()) {
+                rotateWithKicks(state.act, state.grid, +1, audio);
+                audio.playRotationSound(true);   // CW
+                joystick.resetMoveTimer();
+            }
+        }
+    }
+    
+    // Processar controles de joystick para game over
+    if (joystick.isConnected && state.gameover) {
+        if (joystick.isButtonPressed(joystick.buttonStart)) {
+            for (auto& r : state.grid) for (auto& c : r) { c.occ = false; }
+            state.score = 0; state.lines = 0; state.level = 0; state.tick_ms = TICK_MS_START;
+            state.gameover = false; state.paused = false;
+            initializeRandomizer(state);
+            audio.playBeep(520.0, 40, 0.15f, false);
+        }
+    }
 }
 
 static void checkTensionSound(const GameState& state, AudioSystem& audio) {
@@ -1660,12 +1993,16 @@ static bool initializeSDL() {
         SDL_Log("Warning: SDL_INIT_GAMECONTROLLER failed: %s", SDL_GetError());
     }
     
+    if (SDL_Init(SDL_INIT_JOYSTICK) != 0) {
+        SDL_Log("Warning: SDL_INIT_JOYSTICK failed: %s", SDL_GetError());
+    }
+    
     return true;
 }
 
-static bool initializeGame(GameState& state, AudioSystem& audio) {
+static bool initializeGame(GameState& state, AudioSystem& audio, JoystickSystem& joystick) {
     // Carregar configuração
-    loadConfigFile(audio);
+    loadConfigFile(audio, joystick);
     
     // Carregar peças
     bool piecesOk = loadPiecesFile();
@@ -1979,10 +2316,19 @@ int main(int, char**) {
     printf("DEBUG: Step 2 - AudioSystem initialized\n");
     fflush(stdout);
     
+    printf("DEBUG: Step 2.5 - Initializing JoystickSystem...\n");
+    fflush(stdout);
+    JoystickSystem joystick;
+    if (!joystick.initialize()) {
+        printf("Warning: No joystick/controller found, continuing with keyboard only\n");
+    }
+    printf("DEBUG: Step 2.5 - JoystickSystem initialized\n");
+    fflush(stdout);
+    
     printf("DEBUG: Step 3 - Initializing GameState...\n");
     fflush(stdout);
     GameState state;
-    if (!initializeGame(state, audio)) return 1;
+    if (!initializeGame(state, audio, joystick)) return 1;
     printf("DEBUG: Step 3 - GameState initialized successfully\n");
     fflush(stdout);
     
@@ -2002,7 +2348,7 @@ int main(int, char**) {
 
     // Loop principal
     while (state.running) {
-        handleInput(state, audio, ren);
+        handleInput(state, audio, ren, joystick);
         updateGame(state, audio);
 
         // Cache de layout
@@ -2024,6 +2370,7 @@ int main(int, char**) {
     }
 
     // Cleanup
+    joystick.cleanup();
     audio.cleanup();
     SDL_DestroyRenderer(ren); 
     SDL_DestroyWindow(win); 
