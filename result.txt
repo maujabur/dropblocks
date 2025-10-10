@@ -1,0 +1,43 @@
+user@controlaco:~/dropblocks $ ./build_simple.sh 
+=== DROPBLOCKS SIMPLE BUILD v5.4 ===
+Building version 5.4 - Enhanced Early Debugging
+Building simple version without complex flags...
+Compiling debug version...
+Debug build successful: dropblocks_debug
+Compiling production version...
+Production build successful: dropblocks
+Compiling initialization test...
+Initialization test build successful: test_init
+Compiling render test...
+Render test build successful: test_render
+
+=== BUILD COMPLETE ===
+Files created:
+  - test_init (initialization test)
+  - test_render (render test)
+  - dropblocks_debug (debug version)
+  - dropblocks (production version)
+
+To test:
+  ./test_init        # Test SDL2 initialization
+  ./test_render      # Test basic rendering
+  ./dropblocks_debug # Test full game with debug
+  ./dropblocks       # Test full game
+user@controlaco:~/dropblocks $ ./dropblocks_debug 
+=== DROPBLOCKS STARTING ===
+VERSION: 5.4 - Enhanced Early Debugging
+BUILD: Oct  4 2025 00:17:29
+FIXES: Added debugging to identify exact crash location
+DEBUG: Starting SDL2 initialization...
+DEBUG: SDL2 initialization completed
+DEBUG: Starting audio system initialization...
+DEBUG: Audio system initialized
+DEBUG: Starting game state initialization...
+INFO: Config carregado de: default.cfg
+INFO: Pieces carregado de: default.pieces (OK)
+Pieces: 7, PreviewGrid=4, Randomizer=simple, BagSize=0
+Audio: Master=1.0, SFX=0.8, Ambient=1.0
+DEBUG: Game state initialized
+DEBUG: Starting window initialization...
+Segmentation fault
+user@controlaco:~/dropblocks $ 

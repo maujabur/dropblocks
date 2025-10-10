@@ -1635,10 +1635,31 @@ static void updateGame(GameState& state, AudioSystem& audio) {
 
 // Funções especializadas extraídas da main
 static bool initializeSDL() {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER) != 0) {
-        SDL_Log("SDL_Init error: %s", SDL_GetError()); 
+    // Inicializar cada subsistema separadamente para maior compatibilidade
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+        SDL_Log("SDL_INIT_VIDEO error: %s", SDL_GetError());
         return false;
     }
+    
+    if (SDL_Init(SDL_INIT_TIMER) != 0) {
+        SDL_Log("SDL_INIT_TIMER error: %s", SDL_GetError());
+        return false;
+    }
+    
+    if (SDL_Init(SDL_INIT_EVENTS) != 0) {
+        SDL_Log("SDL_INIT_EVENTS error: %s", SDL_GetError());
+        return false;
+    }
+    
+    // Áudio e gamepad são opcionais
+    if (SDL_Init(SDL_INIT_AUDIO) != 0) {
+        SDL_Log("Warning: SDL_INIT_AUDIO failed: %s", SDL_GetError());
+    }
+    
+    if (SDL_Init(SDL_INIT_GAMECONTROLLER) != 0) {
+        SDL_Log("Warning: SDL_INIT_GAMECONTROLLER failed: %s", SDL_GetError());
+    }
+    
     return true;
 }
 
@@ -1937,26 +1958,47 @@ static void renderPostEffects(SDL_Renderer* ren, const LayoutCache& layout, Audi
  */
 int main(int, char**) {
     printf("=== DROPBLOCKS STARTING ===\n");
-    printf("VERSION: 4.9 - Phase 2: Modular rendering system with specialized functions\n");
+    printf("VERSION: 5.1 - Granular Debugging\n");
     printf("BUILD: %s %s\n", __DATE__, __TIME__);
+    printf("FIXES: Added step-by-step debugging to identify exact crash location\n");
     fflush(stdout);
 
     // Inicialização
+    printf("DEBUG: Step 1 - Initializing SDL2...\n");
+    fflush(stdout);
     if (!initializeSDL()) return 1;
+    printf("DEBUG: Step 1 - SDL2 initialized successfully\n");
+    fflush(stdout);
     
+    printf("DEBUG: Step 2 - Initializing AudioSystem...\n");
+    fflush(stdout);
     AudioSystem audio;
     if (!audio.initialize()) {
         printf("Warning: Audio initialization failed, continuing without sound\n");
     }
+    printf("DEBUG: Step 2 - AudioSystem initialized\n");
+    fflush(stdout);
     
+    printf("DEBUG: Step 3 - Initializing GameState...\n");
+    fflush(stdout);
     GameState state;
     if (!initializeGame(state, audio)) return 1;
+    printf("DEBUG: Step 3 - GameState initialized successfully\n");
+    fflush(stdout);
     
+    printf("DEBUG: Step 4 - Initializing Window...\n");
+    fflush(stdout);
     SDL_Window* win = nullptr;
     SDL_Renderer* ren = nullptr;
     if (!initializeWindow(win, ren)) return 1;
+    printf("DEBUG: Step 4 - Window initialized successfully\n");
+    fflush(stdout);
     
+    printf("DEBUG: Step 5 - Initializing Randomizer...\n");
+    fflush(stdout);
     initializeRandomizer(state);
+    printf("DEBUG: Step 5 - Randomizer initialized successfully\n");
+    fflush(stdout);
 
     // Loop principal
     while (state.running) {
