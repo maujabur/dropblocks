@@ -56,6 +56,7 @@
 #include <random>
 #include <array>
 #include <memory>
+#include <map>
 
 // ===========================
 //   SISTEMA DE DEBUG
@@ -106,6 +107,370 @@ public:
 bool DebugLogger::enabled_ = true;
 int DebugLogger::level_ = DebugLogger::DEBUG;
 
+// ===========================
+//   SISTEMA DE CONFIGURAÇÃO MODULAR
+// ===========================
+
+/**
+ * @brief RGB color structure
+ */
+struct RGB { Uint8 r,g,b; };
+
+/**
+ * @brief Visual configuration structure
+ * 
+ * Contains all visual theme settings including colors, effects, and layout
+ */
+struct VisualConfig {
+    // Colors
+    struct Colors {
+        RGB background{8, 8, 12};
+        RGB boardEmpty{28, 28, 36};
+        RGB panelFill{24, 24, 32};
+        RGB panelOutline{90, 90, 120};
+        Uint8 panelOutlineAlpha = 200;
+        
+        // Banner
+        RGB bannerBg{0, 40, 0};
+        RGB bannerOutline{0, 60, 0};
+        Uint8 bannerOutlineAlpha = 180;
+        RGB bannerText{120, 255, 120};
+        
+        // HUD
+        RGB hudLabel{200, 200, 220};
+        RGB hudScore{255, 240, 120};
+        RGB hudLines{180, 255, 180};
+        RGB hudLevel{180, 200, 255};
+        
+        // NEXT
+        RGB nextFill{18, 18, 26};
+        RGB nextOutline{80, 80, 110};
+        Uint8 nextOutlineAlpha = 160;
+        RGB nextLabel{220, 220, 220};
+        RGB nextGridDark{24, 24, 24};
+        RGB nextGridLight{30, 30, 30};
+        bool nextGridUseRgb = false;
+        
+        // Overlay
+        RGB overlayFill{0, 0, 0};
+        Uint8 overlayFillAlpha = 200;
+        RGB overlayOutline{200, 200, 220};
+        Uint8 overlayOutlineAlpha = 120;
+        RGB overlayTop{255, 160, 160};
+        RGB overlaySub{220, 220, 220};
+    } colors;
+    
+    // Effects
+    struct Effects {
+        bool bannerSweep = true;
+        bool globalSweep = true;
+        float sweepSpeedPxps = 15.0f;
+        int sweepBandHS = 30;
+        int sweepAlphaMax = 100;
+        float sweepSoftness = 0.7f;
+        float sweepGSpeedPxps = 20.0f;
+        int sweepGBandHPx = 100;
+        int sweepGAlphaMax = 50;
+        float sweepGSoftness = 0.9f;
+        int scanlineAlpha = 20;
+    } effects;
+    
+    // Layout
+    struct Layout {
+        int roundedPanels = 1;
+        int hudFixedScale = 4;
+        int gap1Scale = 10;
+        int gap2Scale = 10;
+    } layout;
+    
+    // Text
+    std::string titleText = "---H A C K T R I S";
+};
+
+/**
+ * @brief Audio configuration structure
+ * 
+ * Contains all audio settings including volumes and sound toggles
+ */
+struct AudioConfig {
+    float masterVolume = 1.0f;
+    float sfxVolume = 0.8f;
+    float ambientVolume = 1.0f;
+    bool enableMovementSounds = true;
+    bool enableAmbientSounds = true;
+    bool enableComboSounds = true;
+    bool enableLevelUpSounds = true;
+};
+
+/**
+ * @brief Input configuration structure
+ * 
+ * Contains all input settings including joystick and keyboard
+ */
+struct InputConfig {
+    // Joystick button mapping
+    int buttonLeft = 13;
+    int buttonRight = 11;
+    int buttonDown = 14;
+    int buttonUp = 12;
+    int buttonRotateCCW = 0;
+    int buttonRotateCW = 1;
+    int buttonSoftDrop = 2;
+    int buttonHardDrop = 3;
+    int buttonPause = 6;
+    int buttonStart = 7;
+    int buttonQuit = 8;
+    
+    // Analog settings
+    float analogDeadzone = 0.3f;
+    float analogSensitivity = 1.0f;
+    bool invertYAxis = false;
+    
+    // Timing
+    Uint32 moveRepeatDelay = 200;
+    Uint32 softDropRepeatDelay = 100;
+};
+
+/**
+ * @brief Pieces configuration structure
+ * 
+ * Contains all piece-related settings
+ */
+struct PiecesConfig {
+    std::string piecesFilePath = "";
+    int previewGrid = 6;
+    std::string randomizerType = "simple";
+    int randBagSize = 0;
+    std::vector<RGB> pieceColors;
+};
+
+/**
+ * @brief Game configuration structure
+ * 
+ * Contains all game mechanics settings
+ */
+struct GameConfig {
+    int tickMsStart = 400;
+    int tickMsMin = 80;
+    int speedAcceleration = 50;
+    int levelStep = 10;
+    float aspectCorrectionFactor = 0.75f;
+};
+
+/**
+ * @brief Centralized configuration manager
+ * 
+ * Manages all configuration categories and provides unified access
+ */
+class ConfigManager {
+private:
+    VisualConfig visual_;
+    AudioConfig audio_;
+    InputConfig input_;
+    PiecesConfig pieces_;
+    GameConfig game_;
+    
+    std::vector<std::string> configPaths_;
+    std::map<std::string, std::string> overrides_;
+    bool loaded_ = false;
+    
+public:
+    // Getters
+    const VisualConfig& getVisual() const { return visual_; }
+    const AudioConfig& getAudio() const { return audio_; }
+    const InputConfig& getInput() const { return input_; }
+    const PiecesConfig& getPieces() const { return pieces_; }
+    const GameConfig& getGame() const { return game_; }
+    
+    // Setters
+    VisualConfig& getVisual() { return visual_; }
+    AudioConfig& getAudio() { return audio_; }
+    InputConfig& getInput() { return input_; }
+    PiecesConfig& getPieces() { return pieces_; }
+    GameConfig& getGame() { return game_; }
+    
+    // Loading methods
+    bool loadFromFile(const std::string& path);
+    bool loadFromEnvironment();
+    bool loadFromCommandLine(int argc, char* argv[]);
+    bool loadAll();
+    
+    // Override system
+    void setOverride(const std::string& key, const std::string& value);
+    void clearOverrides();
+    
+    // Validation
+    bool validate() const;
+    
+    // Status
+    bool isLoaded() const { return loaded_; }
+    const std::vector<std::string>& getConfigPaths() const { return configPaths_; }
+};
+
+/**
+ * @brief Abstract configuration parser interface
+ * 
+ * Provides a unified interface for parsing different configuration categories
+ */
+class ConfigParser {
+public:
+    virtual ~ConfigParser() = default;
+    virtual bool parse(const std::string& key, const std::string& value) = 0;
+    virtual std::string getCategory() const = 0;
+    virtual bool validate() const = 0;
+};
+
+/**
+ * @brief Visual configuration parser
+ * 
+ * Handles parsing of all visual-related configuration options
+ */
+class VisualConfigParser : public ConfigParser {
+private:
+    VisualConfig& config_;
+    
+    // Helper functions
+    bool parseBool(const std::string& value) const;
+    int parseInt(const std::string& value) const;
+    float parseFloat(const std::string& value) const;
+    bool parseHexColor(const std::string& value, RGB& color) const;
+    
+public:
+    VisualConfigParser(VisualConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "visual"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Audio configuration parser
+ * 
+ * Handles parsing of all audio-related configuration options
+ */
+class AudioConfigParser : public ConfigParser {
+private:
+    AudioConfig& config_;
+    
+    bool parseBool(const std::string& value) const;
+    float parseFloat(const std::string& value) const;
+    
+public:
+    AudioConfigParser(AudioConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "audio"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Input configuration parser
+ * 
+ * Handles parsing of all input-related configuration options
+ */
+class InputConfigParser : public ConfigParser {
+private:
+    InputConfig& config_;
+    
+    bool parseBool(const std::string& value) const;
+    int parseInt(const std::string& value) const;
+    float parseFloat(const std::string& value) const;
+    
+public:
+    InputConfigParser(InputConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "input"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Pieces configuration parser
+ * 
+ * Handles parsing of all piece-related configuration options
+ */
+class PiecesConfigParser : public ConfigParser {
+private:
+    PiecesConfig& config_;
+    
+    int parseInt(const std::string& value) const;
+    bool parseHexColor(const std::string& value, RGB& color) const;
+    
+public:
+    PiecesConfigParser(PiecesConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "pieces"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Game configuration parser
+ * 
+ * Handles parsing of all game mechanics configuration options
+ */
+class GameConfigParser : public ConfigParser {
+private:
+    GameConfig& config_;
+    
+    int parseInt(const std::string& value) const;
+    float parseFloat(const std::string& value) const;
+    
+public:
+    GameConfigParser(GameConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "game"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Configuration inheritance system
+ * 
+ * Manages configuration inheritance chain and priority-based loading
+ */
+class ConfigInheritance {
+private:
+    std::vector<std::string> inheritanceChain_;
+    std::map<std::string, std::string> overrides_;
+    
+public:
+    // Inheritance chain management
+    void addBaseConfig(const std::string& path);
+    void addOverrideConfig(const std::string& path);
+    void clearChain();
+    
+    // Override management
+    void addOverride(const std::string& key, const std::string& value);
+    void clearOverrides();
+    
+    // Loading
+    bool loadInheritedConfigs(ConfigManager& manager);
+    
+    // Getters
+    const std::vector<std::string>& getInheritanceChain() const { return inheritanceChain_; }
+    const std::map<std::string, std::string>& getOverrides() const { return overrides_; }
+};
+
+/**
+ * @brief Configuration validator
+ * 
+ * Validates configuration values and provides error reporting
+ */
+class ConfigValidator {
+public:
+    struct ValidationError {
+        std::string category;
+        std::string key;
+        std::string value;
+        std::string message;
+    };
+    
+    static std::vector<ValidationError> validate(const ConfigManager& config);
+    static bool isValid(const ConfigManager& config);
+    static void printErrors(const std::vector<ValidationError>& errors);
+};
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -153,11 +518,6 @@ enum class RandType {
 };
 static RandType RAND_TYPE = RandType::SIMPLE;
 static int RAND_BAG_SIZE  = 0;             // 0 => tamanho do set
-
-/**
- * @brief RGB color structure
- */
-struct RGB { Uint8 r,g,b; };
 
 /**
  * @brief Theme configuration structure
@@ -229,7 +589,7 @@ static int SPEED_ACCELERATION = 50;
 /** @brief Aspect ratio correction factor for LED screen distortion */
 static float ASPECT_CORRECTION_FACTOR = 0.75f;
 /** @brief Lines required to advance to next level */
-static const int LEVEL_STEP    = 10;
+static int LEVEL_STEP    = 10;
 
 /**
  * @brief Game board cell structure
@@ -1384,6 +1744,599 @@ struct AudioSystem {
     }
 };
 
+// ===========================
+//   IMPLEMENTAÇÕES DO SISTEMA DE CONFIGURAÇÃO
+// ===========================
+
+// Implementação do VisualConfigParser
+bool VisualConfigParser::parseBool(const std::string& value) const {
+    std::string v = value;
+    for (char& c : v) c = (char)std::tolower((unsigned char)c);
+    return (v == "1" || v == "true" || v == "on" || v == "yes");
+}
+
+int VisualConfigParser::parseInt(const std::string& value) const {
+    return std::atoi(value.c_str());
+}
+
+float VisualConfigParser::parseFloat(const std::string& value) const {
+    return (float)std::atof(value.c_str());
+}
+
+bool VisualConfigParser::parseHexColor(const std::string& value, RGB& color) const {
+    std::string hex = value;
+    if (hex[0] == '#') hex = hex.substr(1);
+    if (hex.length() != 6) {
+        DebugLogger::debug("parseHexColor failed: invalid length for " + value + " (length=" + std::to_string(hex.length()) + ")");
+        return false;
+    }
+    
+    try {
+        color.r = (Uint8)std::stoi(hex.substr(0, 2), nullptr, 16);
+        color.g = (Uint8)std::stoi(hex.substr(2, 2), nullptr, 16);
+        color.b = (Uint8)std::stoi(hex.substr(4, 2), nullptr, 16);
+        DebugLogger::debug("parseHexColor success: " + value + " -> R=" + std::to_string(color.r) + " G=" + std::to_string(color.g) + " B=" + std::to_string(color.b));
+        return true;
+    } catch (...) {
+        DebugLogger::debug("parseHexColor failed: exception parsing " + value);
+        return false;
+    }
+}
+
+bool VisualConfigParser::parse(const std::string& key, const std::string& value) {
+    DebugLogger::debug("VisualConfigParser::parse called with key=" + key + " value=" + value);
+    
+    // Colors
+    if (key == "BG") return parseHexColor(value, config_.colors.background);
+    if (key == "BOARD_EMPTY") return parseHexColor(value, config_.colors.boardEmpty);
+    if (key == "PANEL_FILL") return parseHexColor(value, config_.colors.panelFill);
+    if (key == "PANEL_OUTLINE") return parseHexColor(value, config_.colors.panelOutline);
+    if (key == "PANEL_OUTLINE_A") { config_.colors.panelOutlineAlpha = parseInt(value); return true; }
+    
+    // Banner
+    if (key == "BANNER_BG") return parseHexColor(value, config_.colors.bannerBg);
+    if (key == "BANNER_OUTLINE") return parseHexColor(value, config_.colors.bannerOutline);
+    if (key == "BANNER_OUTLINE_A") { config_.colors.bannerOutlineAlpha = parseInt(value); return true; }
+    if (key == "BANNER_TEXT") return parseHexColor(value, config_.colors.bannerText);
+    
+    // HUD
+    if (key == "HUD_LABEL") return parseHexColor(value, config_.colors.hudLabel);
+    if (key == "HUD_SCORE") return parseHexColor(value, config_.colors.hudScore);
+    if (key == "HUD_LINES") return parseHexColor(value, config_.colors.hudLines);
+    if (key == "HUD_LEVEL") return parseHexColor(value, config_.colors.hudLevel);
+    
+    // NEXT
+    if (key == "NEXT_FILL") return parseHexColor(value, config_.colors.nextFill);
+    if (key == "NEXT_OUTLINE") return parseHexColor(value, config_.colors.nextOutline);
+    if (key == "NEXT_OUTLINE_A") { config_.colors.nextOutlineAlpha = parseInt(value); return true; }
+    if (key == "NEXT_LABEL") return parseHexColor(value, config_.colors.nextLabel);
+    if (key == "NEXT_GRID_DARK") return parseHexColor(value, config_.colors.nextGridDark);
+    if (key == "NEXT_GRID_LIGHT") return parseHexColor(value, config_.colors.nextGridLight);
+    if (key == "NEXT_GRID_USE_RGB") { config_.colors.nextGridUseRgb = parseBool(value); return true; }
+    
+    // Overlay
+    if (key == "OVERLAY_FILL") return parseHexColor(value, config_.colors.overlayFill);
+    if (key == "OVERLAY_FILL_A") { config_.colors.overlayFillAlpha = parseInt(value); return true; }
+    if (key == "OVERLAY_OUTLINE") return parseHexColor(value, config_.colors.overlayOutline);
+    if (key == "OVERLAY_OUTLINE_A") { config_.colors.overlayOutlineAlpha = parseInt(value); return true; }
+    if (key == "OVERLAY_TOP") return parseHexColor(value, config_.colors.overlayTop);
+    if (key == "OVERLAY_SUB") return parseHexColor(value, config_.colors.overlaySub);
+    
+    // Effects
+    if (key == "ENABLE_BANNER_SWEEP") { config_.effects.bannerSweep = parseBool(value); return true; }
+    if (key == "ENABLE_GLOBAL_SWEEP") { config_.effects.globalSweep = parseBool(value); return true; }
+    if (key == "SWEEP_SPEED_PXPS") { config_.effects.sweepSpeedPxps = parseFloat(value); return true; }
+    if (key == "SWEEP_BAND_H_S") { config_.effects.sweepBandHS = parseInt(value); return true; }
+    if (key == "SWEEP_ALPHA_MAX") { config_.effects.sweepAlphaMax = parseInt(value); return true; }
+    if (key == "SWEEP_SOFTNESS") { config_.effects.sweepSoftness = parseFloat(value); return true; }
+    if (key == "SWEEP_G_SPEED_PXPS") { config_.effects.sweepGSpeedPxps = parseFloat(value); return true; }
+    if (key == "SWEEP_G_BAND_H_PX") { config_.effects.sweepGBandHPx = parseInt(value); return true; }
+    if (key == "SWEEP_G_ALPHA_MAX") { config_.effects.sweepGAlphaMax = parseInt(value); return true; }
+    if (key == "SWEEP_G_SOFTNESS") { config_.effects.sweepGSoftness = parseFloat(value); return true; }
+    if (key == "SCANLINE_ALPHA") { config_.effects.scanlineAlpha = parseInt(value); return true; }
+    
+    // Layout
+    if (key == "ROUNDED_PANELS") { config_.layout.roundedPanels = parseInt(value); return true; }
+    if (key == "HUD_FIXED_SCALE") { config_.layout.hudFixedScale = parseInt(value); return true; }
+    if (key == "GAP1_SCALE") { config_.layout.gap1Scale = parseInt(value); return true; }
+    if (key == "GAP2_SCALE") { config_.layout.gap2Scale = parseInt(value); return true; }
+    
+    // Text
+    if (key == "TITLE_TEXT") { config_.titleText = value; return true; }
+    
+    return false;
+}
+
+bool VisualConfigParser::validate() const {
+    // Validate ranges
+    if (config_.effects.sweepAlphaMax < 0 || config_.effects.sweepAlphaMax > 255) return false;
+    if (config_.effects.sweepGAlphaMax < 0 || config_.effects.sweepGAlphaMax > 255) return false;
+    if (config_.effects.scanlineAlpha < 0 || config_.effects.scanlineAlpha > 255) return false;
+    if (config_.effects.sweepSoftness < 0.0f || config_.effects.sweepSoftness > 1.0f) return false;
+    if (config_.effects.sweepGSoftness < 0.0f || config_.effects.sweepGSoftness > 1.0f) return false;
+    if (config_.layout.roundedPanels < 0) return false;
+    if (config_.layout.hudFixedScale < 1) return false;
+    if (config_.layout.gap1Scale < 0) return false;
+    if (config_.layout.gap2Scale < 0) return false;
+    
+    return true;
+}
+
+// Implementação do AudioConfigParser
+bool AudioConfigParser::parseBool(const std::string& value) const {
+    std::string v = value;
+    for (char& c : v) c = (char)std::tolower((unsigned char)c);
+    return (v == "1" || v == "true" || v == "on" || v == "yes");
+}
+
+float AudioConfigParser::parseFloat(const std::string& value) const {
+    float v = (float)std::atof(value.c_str());
+    if (v < 0.0f) v = 0.0f;
+    if (v > 1.0f) v = 1.0f;
+    return v;
+}
+
+bool AudioConfigParser::parse(const std::string& key, const std::string& value) {
+    if (key == "AUDIO_MASTER_VOLUME") { config_.masterVolume = parseFloat(value); return true; }
+    if (key == "AUDIO_SFX_VOLUME") { config_.sfxVolume = parseFloat(value); return true; }
+    if (key == "AUDIO_AMBIENT_VOLUME") { config_.ambientVolume = parseFloat(value); return true; }
+    if (key == "ENABLE_MOVEMENT_SOUNDS") { config_.enableMovementSounds = parseBool(value); return true; }
+    if (key == "ENABLE_AMBIENT_SOUNDS") { config_.enableAmbientSounds = parseBool(value); return true; }
+    if (key == "ENABLE_COMBO_SOUNDS") { config_.enableComboSounds = parseBool(value); return true; }
+    if (key == "ENABLE_LEVEL_UP_SOUNDS") { config_.enableLevelUpSounds = parseBool(value); return true; }
+    
+    return false;
+}
+
+bool AudioConfigParser::validate() const {
+    return (config_.masterVolume >= 0.0f && config_.masterVolume <= 1.0f) &&
+           (config_.sfxVolume >= 0.0f && config_.sfxVolume <= 1.0f) &&
+           (config_.ambientVolume >= 0.0f && config_.ambientVolume <= 1.0f);
+}
+
+// Implementação do InputConfigParser
+bool InputConfigParser::parseBool(const std::string& value) const {
+    std::string v = value;
+    for (char& c : v) c = (char)std::tolower((unsigned char)c);
+    return (v == "1" || v == "true" || v == "on" || v == "yes");
+}
+
+int InputConfigParser::parseInt(const std::string& value) const {
+    return std::atoi(value.c_str());
+}
+
+float InputConfigParser::parseFloat(const std::string& value) const {
+    return (float)std::atof(value.c_str());
+}
+
+bool InputConfigParser::parse(const std::string& key, const std::string& value) {
+    // Button mapping
+    if (key == "JOYSTICK_BUTTON_LEFT") { config_.buttonLeft = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_RIGHT") { config_.buttonRight = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_DOWN") { config_.buttonDown = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_UP") { config_.buttonUp = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_ROTATE_CCW") { config_.buttonRotateCCW = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_ROTATE_CW") { config_.buttonRotateCW = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_SOFT_DROP") { config_.buttonSoftDrop = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_HARD_DROP") { config_.buttonHardDrop = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_PAUSE") { config_.buttonPause = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_START") { config_.buttonStart = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_QUIT") { config_.buttonQuit = parseInt(value); return true; }
+    
+    // Analog settings
+    if (key == "JOYSTICK_ANALOG_DEADZONE") { config_.analogDeadzone = parseFloat(value); return true; }
+    if (key == "JOYSTICK_ANALOG_SENSITIVITY") { config_.analogSensitivity = parseFloat(value); return true; }
+    if (key == "JOYSTICK_INVERT_Y_AXIS") { config_.invertYAxis = parseBool(value); return true; }
+    
+    // Timing
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY") { config_.moveRepeatDelay = parseInt(value); return true; }
+    if (key == "JOYSTICK_SOFT_DROP_REPEAT_DELAY") { config_.softDropRepeatDelay = parseInt(value); return true; }
+    
+    return false;
+}
+
+bool InputConfigParser::validate() const {
+    return (config_.analogDeadzone >= 0.0f && config_.analogDeadzone <= 1.0f) &&
+           (config_.analogSensitivity >= 0.0f && config_.analogSensitivity <= 2.0f) &&
+           (config_.buttonLeft >= 0 && config_.buttonLeft < 32) &&
+           (config_.buttonRight >= 0 && config_.buttonRight < 32) &&
+           (config_.buttonDown >= 0 && config_.buttonDown < 32) &&
+           (config_.buttonUp >= 0 && config_.buttonUp < 32) &&
+           (config_.buttonRotateCCW >= 0 && config_.buttonRotateCCW < 32) &&
+           (config_.buttonRotateCW >= 0 && config_.buttonRotateCW < 32) &&
+           (config_.buttonSoftDrop >= 0 && config_.buttonSoftDrop < 32) &&
+           (config_.buttonHardDrop >= 0 && config_.buttonHardDrop < 32) &&
+           (config_.buttonPause >= 0 && config_.buttonPause < 32) &&
+           (config_.buttonStart >= 0 && config_.buttonStart < 32) &&
+           (config_.buttonQuit >= 0 && config_.buttonQuit < 32);
+}
+
+// Implementação do PiecesConfigParser
+int PiecesConfigParser::parseInt(const std::string& value) const {
+    return std::atoi(value.c_str());
+}
+
+bool PiecesConfigParser::parseHexColor(const std::string& value, RGB& color) const {
+    std::string hex = value;
+    if (hex[0] == '#') hex = hex.substr(1);
+    if (hex.length() != 6) return false;
+    
+    try {
+        color.r = (Uint8)std::stoi(hex.substr(0, 2), nullptr, 16);
+        color.g = (Uint8)std::stoi(hex.substr(2, 2), nullptr, 16);
+        color.b = (Uint8)std::stoi(hex.substr(4, 2), nullptr, 16);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool PiecesConfigParser::parse(const std::string& key, const std::string& value) {
+    if (key == "PIECES_FILE") { config_.piecesFilePath = value; return true; }
+    if (key == "PREVIEW_GRID") { config_.previewGrid = parseInt(value); return true; }
+    if (key == "RAND_TYPE") { config_.randomizerType = value; return true; }
+    if (key == "RAND_BAG_SIZE") { config_.randBagSize = parseInt(value); return true; }
+    
+    // Piece colors (PIECE0, PIECE1, etc.)
+    if (key.rfind("PIECE", 0) == 0) {
+        std::string numStr = key.substr(5);
+        int pieceIndex = -1;
+        try {
+            pieceIndex = std::stoi(numStr);
+        } catch (...) {
+            return false;
+        }
+        
+        RGB color;
+        if (parseHexColor(value, color)) {
+            if (pieceIndex >= (int)config_.pieceColors.size()) {
+                config_.pieceColors.resize(pieceIndex + 1, {200, 200, 200});
+            }
+            config_.pieceColors[pieceIndex] = color;
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool PiecesConfigParser::validate() const {
+    return (config_.previewGrid >= 4 && config_.previewGrid <= 12) &&
+           (config_.randBagSize >= 0 && config_.randBagSize <= 20) &&
+           (config_.randomizerType == "simple" || config_.randomizerType == "bag");
+}
+
+// Implementação do GameConfigParser
+int GameConfigParser::parseInt(const std::string& value) const {
+    return std::atoi(value.c_str());
+}
+
+float GameConfigParser::parseFloat(const std::string& value) const {
+    return (float)std::atof(value.c_str());
+}
+
+bool GameConfigParser::parse(const std::string& key, const std::string& value) {
+    if (key == "TICK_MS_START") { config_.tickMsStart = parseInt(value); return true; }
+    if (key == "TICK_MS_MIN") { config_.tickMsMin = parseInt(value); return true; }
+    if (key == "SPEED_ACCELERATION") { config_.speedAcceleration = parseInt(value); return true; }
+    if (key == "LEVEL_STEP") { config_.levelStep = parseInt(value); return true; }
+    if (key == "ASPECT_CORRECTION_FACTOR") { config_.aspectCorrectionFactor = parseFloat(value); return true; }
+    
+    return false;
+}
+
+bool GameConfigParser::validate() const {
+    return (config_.tickMsStart > 0) &&
+           (config_.tickMsMin > 0) &&
+           (config_.speedAcceleration > 0) &&
+           (config_.levelStep > 0) &&
+           (config_.aspectCorrectionFactor > 0.0f && config_.aspectCorrectionFactor <= 2.0f);
+}
+
+// Implementação do ConfigManager
+bool ConfigManager::loadFromFile(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.good()) {
+        DebugLogger::error("Failed to open config file: " + path);
+        return false;
+    }
+    
+    configPaths_.push_back(path);
+    
+    // Create parsers
+    VisualConfigParser visualParser(visual_);
+    AudioConfigParser audioParser(audio_);
+    InputConfigParser inputParser(input_);
+    PiecesConfigParser piecesParser(pieces_);
+    GameConfigParser gameParser(game_);
+    
+    std::vector<ConfigParser*> parsers = {&visualParser, &audioParser, &inputParser, &piecesParser, &gameParser};
+    
+    std::string line;
+    int lineNum = 0;
+    int processedLines = 0;
+    int skippedLines = 0;
+    
+    while (std::getline(file, line)) {
+        lineNum++;
+        
+        DebugLogger::debug("Reading line " + std::to_string(lineNum) + ": '" + line + "'");
+        
+        // Parse line (remove comments) - but only if # is at the beginning of the line or after whitespace
+        size_t commentPos = line.find('#');
+        if (commentPos != std::string::npos) {
+            // Check if # is at the beginning or after only whitespace
+            std::string beforeHash = line.substr(0, commentPos);
+            beforeHash.erase(0, beforeHash.find_first_not_of(" \t"));
+            if (beforeHash.empty()) {
+                line = line.substr(0, commentPos);
+            }
+        }
+        
+        // Also remove ; comments (inline comments)
+        size_t semiPos = line.find(';');
+        if (semiPos != std::string::npos) {
+            line = line.substr(0, semiPos);
+        }
+        
+        // Trim whitespace
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+        
+        if (line.empty()) {
+            skippedLines++;
+            continue;
+        }
+        
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) {
+            skippedLines++;
+            continue;
+        }
+        
+        std::string key = line.substr(0, eq);
+        std::string value = line.substr(eq + 1);
+        
+        DebugLogger::debug("Raw parsing - key='" + key + "' value='" + value + "'");
+        
+        // Trim key and value
+        trim(key);
+        trim(value);
+        
+        DebugLogger::debug("After trim - key='" + key + "' value='" + value + "'");
+        
+        if (key.empty()) {
+            skippedLines++;
+            continue;
+        }
+        
+        // Convert key to uppercase
+        for (char& c : key) c = (char)std::toupper((unsigned char)c);
+        
+        // Try each parser
+        bool parsed = false;
+        for (auto* parser : parsers) {
+            if (parser->parse(key, value)) {
+                parsed = true;
+                processedLines++;
+                DebugLogger::debug("Parsed key: " + key + " = " + value + " by " + parser->getCategory());
+                break;
+            }
+        }
+        
+        if (!parsed) {
+            skippedLines++;
+            DebugLogger::warning("Unknown config key: " + key);
+        }
+    }
+    
+    DebugLogger::info("Config loaded from: " + path + " (processed: " + std::to_string(processedLines) + ", skipped: " + std::to_string(skippedLines) + ")");
+    loaded_ = true;
+    return true;
+}
+
+bool ConfigManager::loadFromEnvironment() {
+    if (const char* env = std::getenv("DROPBLOCKS_CFG")) {
+        return loadFromFile(env);
+    }
+    return false;
+}
+
+bool ConfigManager::loadFromCommandLine(int argc, char* argv[]) {
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg.length() > 4 && arg.substr(arg.length() - 4) == ".cfg") {
+            return loadFromFile(arg);
+        }
+    }
+    return false;
+}
+
+bool ConfigManager::loadAll() {
+    // Try environment variable first
+    if (loadFromEnvironment()) return true;
+    
+    // Try command line
+    if (loadFromCommandLine(0, nullptr)) return true;
+    
+    // Try default files
+    if (loadFromFile("default.cfg")) return true;
+    if (loadFromFile("dropblocks.cfg")) return true;
+    
+    // Try home directory
+    if (const char* home = std::getenv("HOME")) {
+        std::string homeConfig = std::string(home) + "/.config/default.cfg";
+        if (loadFromFile(homeConfig)) return true;
+        
+        homeConfig = std::string(home) + "/.config/dropblocks.cfg";
+        if (loadFromFile(homeConfig)) return true;
+    }
+    
+    DebugLogger::info("No config files found, using defaults");
+    loaded_ = true;
+    return true;
+}
+
+void ConfigManager::setOverride(const std::string& key, const std::string& value) {
+    overrides_[key] = value;
+}
+
+void ConfigManager::clearOverrides() {
+    overrides_.clear();
+}
+
+bool ConfigManager::validate() const {
+    VisualConfigParser visualParser(const_cast<VisualConfig&>(visual_));
+    AudioConfigParser audioParser(const_cast<AudioConfig&>(audio_));
+    InputConfigParser inputParser(const_cast<InputConfig&>(input_));
+    PiecesConfigParser piecesParser(const_cast<PiecesConfig&>(pieces_));
+    GameConfigParser gameParser(const_cast<GameConfig&>(game_));
+    
+    return visualParser.validate() && audioParser.validate() && 
+           inputParser.validate() && piecesParser.validate() && 
+           gameParser.validate();
+}
+
+// ===========================
+//   FUNÇÕES DE APLICAÇÃO DE CONFIGURAÇÃO
+// ===========================
+
+/**
+ * @brief Apply audio configuration to AudioSystem
+ */
+static void applyConfigToAudio(AudioSystem& audio, const AudioConfig& config) {
+    audio.masterVolume = config.masterVolume;
+    audio.sfxVolume = config.sfxVolume;
+    audio.ambientVolume = config.ambientVolume;
+    audio.enableMovementSounds = config.enableMovementSounds;
+    audio.enableAmbientSounds = config.enableAmbientSounds;
+    audio.enableComboSounds = config.enableComboSounds;
+    audio.enableLevelUpSounds = config.enableLevelUpSounds;
+}
+
+/**
+ * @brief Apply visual configuration to global theme
+ */
+static void applyConfigToTheme(const VisualConfig& config) {
+    DebugLogger::debug("applyConfigToTheme - Applying visual configuration to THEME");
+    
+    // Apply colors
+    THEME.bg_r = config.colors.background.r;
+    THEME.bg_g = config.colors.background.g;
+    THEME.bg_b = config.colors.background.b;
+    
+    DebugLogger::debug("Background color: R=" + std::to_string(THEME.bg_r) + " G=" + std::to_string(THEME.bg_g) + " B=" + std::to_string(THEME.bg_b));
+    
+    THEME.board_empty_r = config.colors.boardEmpty.r;
+    THEME.board_empty_g = config.colors.boardEmpty.g;
+    THEME.board_empty_b = config.colors.boardEmpty.b;
+    
+    THEME.panel_fill_r = config.colors.panelFill.r;
+    THEME.panel_fill_g = config.colors.panelFill.g;
+    THEME.panel_fill_b = config.colors.panelFill.b;
+    
+    THEME.panel_outline_r = config.colors.panelOutline.r;
+    THEME.panel_outline_g = config.colors.panelOutline.g;
+    THEME.panel_outline_b = config.colors.panelOutline.b;
+    THEME.panel_outline_a = config.colors.panelOutlineAlpha;
+    
+    // Banner
+    THEME.banner_bg_r = config.colors.bannerBg.r;
+    THEME.banner_bg_g = config.colors.bannerBg.g;
+    THEME.banner_bg_b = config.colors.bannerBg.b;
+    
+    THEME.banner_outline_r = config.colors.bannerOutline.r;
+    THEME.banner_outline_g = config.colors.bannerOutline.g;
+    THEME.banner_outline_b = config.colors.bannerOutline.b;
+    THEME.banner_outline_a = config.colors.bannerOutlineAlpha;
+    
+    THEME.banner_text_r = config.colors.bannerText.r;
+    THEME.banner_text_g = config.colors.bannerText.g;
+    THEME.banner_text_b = config.colors.bannerText.b;
+    
+    // HUD
+    THEME.hud_label_r = config.colors.hudLabel.r;
+    THEME.hud_label_g = config.colors.hudLabel.g;
+    THEME.hud_label_b = config.colors.hudLabel.b;
+    
+    THEME.hud_score_r = config.colors.hudScore.r;
+    THEME.hud_score_g = config.colors.hudScore.g;
+    THEME.hud_score_b = config.colors.hudScore.b;
+    
+    THEME.hud_lines_r = config.colors.hudLines.r;
+    THEME.hud_lines_g = config.colors.hudLines.g;
+    THEME.hud_lines_b = config.colors.hudLines.b;
+    
+    THEME.hud_level_r = config.colors.hudLevel.r;
+    THEME.hud_level_g = config.colors.hudLevel.g;
+    THEME.hud_level_b = config.colors.hudLevel.b;
+    
+    // NEXT
+    THEME.next_fill_r = config.colors.nextFill.r;
+    THEME.next_fill_g = config.colors.nextFill.g;
+    THEME.next_fill_b = config.colors.nextFill.b;
+    
+    THEME.next_outline_r = config.colors.nextOutline.r;
+    THEME.next_outline_g = config.colors.nextOutline.g;
+    THEME.next_outline_b = config.colors.nextOutline.b;
+    THEME.next_outline_a = config.colors.nextOutlineAlpha;
+    
+    THEME.next_label_r = config.colors.nextLabel.r;
+    THEME.next_label_g = config.colors.nextLabel.g;
+    THEME.next_label_b = config.colors.nextLabel.b;
+    
+    THEME.next_grid_dark_r = config.colors.nextGridDark.r;
+    THEME.next_grid_dark_g = config.colors.nextGridDark.g;
+    THEME.next_grid_dark_b = config.colors.nextGridDark.b;
+    
+    THEME.next_grid_light_r = config.colors.nextGridLight.r;
+    THEME.next_grid_light_g = config.colors.nextGridLight.g;
+    THEME.next_grid_light_b = config.colors.nextGridLight.b;
+    THEME.next_grid_use_rgb = config.colors.nextGridUseRgb;
+    
+    // Overlay
+    THEME.overlay_fill_r = config.colors.overlayFill.r;
+    THEME.overlay_fill_g = config.colors.overlayFill.g;
+    THEME.overlay_fill_b = config.colors.overlayFill.b;
+    THEME.overlay_fill_a = config.colors.overlayFillAlpha;
+    
+    THEME.overlay_outline_r = config.colors.overlayOutline.r;
+    THEME.overlay_outline_g = config.colors.overlayOutline.g;
+    THEME.overlay_outline_b = config.colors.overlayOutline.b;
+    THEME.overlay_outline_a = config.colors.overlayOutlineAlpha;
+    
+    THEME.overlay_top_r = config.colors.overlayTop.r;
+    THEME.overlay_top_g = config.colors.overlayTop.g;
+    THEME.overlay_top_b = config.colors.overlayTop.b;
+    
+    THEME.overlay_sub_r = config.colors.overlaySub.r;
+    THEME.overlay_sub_g = config.colors.overlaySub.g;
+    THEME.overlay_sub_b = config.colors.overlaySub.b;
+    
+    // Apply effects
+    ENABLE_BANNER_SWEEP = config.effects.bannerSweep;
+    ENABLE_GLOBAL_SWEEP = config.effects.globalSweep;
+    SWEEP_SPEED_PXPS = config.effects.sweepSpeedPxps;
+    SWEEP_BAND_H_S = config.effects.sweepBandHS;
+    SWEEP_ALPHA_MAX = config.effects.sweepAlphaMax;
+    SWEEP_SOFTNESS = config.effects.sweepSoftness;
+    SWEEP_G_SPEED_PXPS = config.effects.sweepGSpeedPxps;
+    SWEEP_G_BAND_H_PX = config.effects.sweepGBandHPx;
+    SWEEP_G_ALPHA_MAX = config.effects.sweepGAlphaMax;
+    SWEEP_G_SOFTNESS = config.effects.sweepGSoftness;
+    SCANLINE_ALPHA = config.effects.scanlineAlpha;
+    
+    // Apply layout
+    ROUNDED_PANELS = config.layout.roundedPanels;
+    HUD_FIXED_SCALE = config.layout.hudFixedScale;
+    GAP1_SCALE = config.layout.gap1Scale;
+    GAP2_SCALE = config.layout.gap2Scale;
+    
+    // Apply text
+    TITLE_TEXT = config.titleText;
+}
+
+
 // Implementação da função processAudioConfigs
 static bool processAudioConfigs(const std::string& key, const std::string& val, int& processedLines, AudioSystem& audio) {
     auto setb = [&](const char* K, bool& ref) {
@@ -2191,6 +3144,33 @@ struct GameState {
     GameState() : grid(ROWS, std::vector<Cell>(COLS)), rng((unsigned)time(nullptr)) {}
 };
 
+/**
+ * @brief Apply game configuration to GameState
+ */
+static void applyConfigToGame(GameState& state, const GameConfig& config) {
+    TICK_MS_START = config.tickMsStart;
+    TICK_MS_MIN = config.tickMsMin;
+    SPEED_ACCELERATION = config.speedAcceleration;
+    LEVEL_STEP = config.levelStep;
+    ASPECT_CORRECTION_FACTOR = config.aspectCorrectionFactor;
+}
+
+/**
+ * @brief Apply pieces configuration to global theme
+ */
+static void applyConfigToPieces(const PiecesConfig& config) {
+    DebugLogger::debug("applyConfigToPieces - Applying pieces configuration to THEME");
+    
+    // Apply piece colors
+    if (!config.pieceColors.empty()) {
+        THEME.piece_colors.clear();
+        for (const auto& color : config.pieceColors) {
+            THEME.piece_colors.push_back({color.r, color.g, color.b});
+        }
+        DebugLogger::debug("Applied " + std::to_string(config.pieceColors.size()) + " piece colors");
+    }
+}
+
 // Implementação da função initializeRandomizer
 static void initializeRandomizer(GameState& state) {
     auto refillBag = [&]() {
@@ -2494,16 +3474,22 @@ static bool initializeSDL() {
     return true;
 }
 
-static bool initializeGame(GameState& state, AudioSystem& audio) {
-    DebugLogger::debug("initializeGame - Step 1: Creating temp JoystickSystem");
+static bool initializeGame(GameState& state, AudioSystem& audio, ConfigManager& configManager) {
+    DebugLogger::debug("initializeGame - Step 1: Loading configuration");
     
-    // Carregar configuração (criar JoystickSystem temporário para compatibilidade)
-    JoystickSystem tempJoystick;
+    // Load configuration using new system
+    if (!configManager.loadAll()) {
+        DebugLogger::error("Failed to load configuration");
+        return false;
+    }
     
-    DebugLogger::debug("initializeGame - Step 2: Loading config file");
-    loadConfigFile(audio, tempJoystick);
+    // Apply configuration to existing systems
+    applyConfigToAudio(audio, configManager.getAudio());
+    applyConfigToTheme(configManager.getVisual());
+    applyConfigToGame(state, configManager.getGame());
+    applyConfigToPieces(configManager.getPieces());
     
-    DebugLogger::debug("initializeGame - Step 3: Config file loaded successfully");
+    DebugLogger::debug("initializeGame - Step 2: Configuration applied successfully");
     
     // Carregar peças
     bool piecesOk = loadPiecesFile();
@@ -3237,18 +4223,21 @@ int main(int, char**) {
     }
     DebugLogger::debug("Step 2.5 - InputManager initialized");
     
-    DebugLogger::debug("Step 3 - Initializing GameState...");
-    GameState state;
-    if (!initializeGame(state, audio)) return 1;
-    DebugLogger::debug("Step 3 - GameState initialized successfully");
+    DebugLogger::debug("Step 3 - Initializing ConfigManager...");
+    ConfigManager configManager;
     
-    DebugLogger::debug("Step 4 - Initializing Window...");
+    DebugLogger::debug("Step 4 - Initializing GameState...");
+    GameState state;
+    if (!initializeGame(state, audio, configManager)) return 1;
+    DebugLogger::debug("Step 4 - GameState initialized successfully");
+    
+    DebugLogger::debug("Step 5 - Initializing Window...");
     SDL_Window* win = nullptr;
     SDL_Renderer* ren = nullptr;
     if (!initializeWindow(win, ren)) return 1;
-    DebugLogger::debug("Step 4 - Window initialized successfully");
+    DebugLogger::debug("Step 5 - Window initialized successfully");
     
-    DebugLogger::debug("Step 4.5 - Initializing RenderManager...");
+    DebugLogger::debug("Step 5.5 - Initializing RenderManager...");
     RenderManager renderManager(ren);
     
     // Adicionar camadas de renderização
@@ -3259,11 +4248,11 @@ int main(int, char**) {
     renderManager.addLayer(std::make_unique<OverlayLayer>());
     renderManager.addLayer(std::make_unique<PostEffectsLayer>(&audio));
     
-    DebugLogger::debug("Step 4.5 - RenderManager initialized with " + std::to_string(renderManager.getLayerNames().size()) + " layers");
+    DebugLogger::debug("Step 5.5 - RenderManager initialized with " + std::to_string(renderManager.getLayerNames().size()) + " layers");
     
-    DebugLogger::debug("Step 5 - Initializing Randomizer...");
+    DebugLogger::debug("Step 6 - Initializing Randomizer...");
     initializeRandomizer(state);
-    DebugLogger::debug("Step 5 - Randomizer initialized successfully");
+    DebugLogger::debug("Step 6 - Randomizer initialized successfully");
 
     // Loop principal
     while (state.running) {
