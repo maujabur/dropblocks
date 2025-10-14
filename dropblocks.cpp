@@ -55,6 +55,56 @@
 #include <sstream>
 #include <random>
 #include <array>
+#include <memory>
+
+// ===========================
+//   SISTEMA DE DEBUG
+// ===========================
+
+/**
+ * @brief Debug logging system
+ * 
+ * Centralized debug logging with levels and automatic flushing
+ */
+class DebugLogger {
+private:
+    static bool enabled_;
+    static int level_;
+    
+public:
+    enum Level {
+        ERROR = 0,
+        WARNING = 1,
+        INFO = 2,
+        DEBUG = 3
+    };
+    
+    static void setEnabled(bool enabled) { enabled_ = enabled; }
+    static void setLevel(int level) { level_ = level; }
+    
+    static void log(Level level, const std::string& message) {
+        if (!enabled_ || level > level_) return;
+        
+        const char* prefix = "";
+        switch (level) {
+            case ERROR: prefix = "ERROR"; break;
+            case WARNING: prefix = "WARNING"; break;
+            case INFO: prefix = "INFO"; break;
+            case DEBUG: prefix = "DEBUG"; break;
+        }
+        
+        printf("[%s] %s\n", prefix, message.c_str());
+        fflush(stdout);
+    }
+    
+    static void error(const std::string& message) { log(ERROR, message); }
+    static void warning(const std::string& message) { log(WARNING, message); }
+    static void info(const std::string& message) { log(INFO, message); }
+    static void debug(const std::string& message) { log(DEBUG, message); }
+};
+
+bool DebugLogger::enabled_ = true;
+int DebugLogger::level_ = DebugLogger::DEBUG;
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -519,6 +569,8 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
 }
 
 static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickSystem& joystick) {
+    DebugLogger::debug("loadConfigFromStream - Starting to parse config stream");
+    
     std::string line;
     int lineNum = 0;
     int processedLines = 0;
@@ -565,9 +617,21 @@ static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickS
         // Linha não reconhecida
         skippedLines++;
     }
+    
+    DebugLogger::debug("loadConfigFromStream - Finished parsing. Processed: " + std::to_string(processedLines) + ", Skipped: " + std::to_string(skippedLines));
 }
 static bool loadConfigPath(const std::string& p, AudioSystem& audio, JoystickSystem& joystick){
-    std::ifstream f(p.c_str()); if(f.good()){ loadConfigFromStream(f, audio, joystick); return true; } return false;
+    DebugLogger::debug("loadConfigPath - Attempting to load: " + p);
+    
+    std::ifstream f(p.c_str()); 
+    if(f.good()){ 
+        DebugLogger::debug("loadConfigPath - File opened successfully, loading from stream");
+        loadConfigFromStream(f, audio, joystick); 
+        DebugLogger::debug("loadConfigPath - Config loaded successfully from stream");
+        return true; 
+    } 
+    DebugLogger::debug("loadConfigPath - File not found or not good: " + p);
+    return false;
 }
 /**
  * @brief Load configuration file
@@ -581,33 +645,37 @@ static bool loadConfigPath(const std::string& p, AudioSystem& audio, JoystickSys
  * @param audio Audio system reference for audio configuration
  */
 static void loadConfigFile(AudioSystem& audio, JoystickSystem& joystick){
+    DebugLogger::debug("loadConfigFile - Step 1: Checking DROPBLOCKS_CFG env var");
+    
     if(const char* env = std::getenv("DROPBLOCKS_CFG")){ 
+        DebugLogger::debug("loadConfigFile - Found DROPBLOCKS_CFG: " + std::string(env));
         if(loadConfigPath(env, audio, joystick)) { 
-            printf("INFO: Config carregado de: %s\n", env); 
+            DebugLogger::info("Config carregado de: " + std::string(env)); 
             return; 
         } 
+        DebugLogger::debug("loadConfigFile - Failed to load from DROPBLOCKS_CFG");
     }
     if(loadConfigPath("default.cfg", audio, joystick)) { 
-        printf("INFO: Config carregado de: default.cfg\n"); 
+        DebugLogger::info("Config carregado de: default.cfg"); 
         return; 
     }
     if(loadConfigPath("dropblocks.cfg", audio, joystick)) { 
-        printf("INFO: Config carregado de: dropblocks.cfg\n"); 
+        DebugLogger::info("Config carregado de: dropblocks.cfg"); 
         return; 
     } // fallback para compatibilidade
     if(const char* home = std::getenv("HOME")){
         std::string p = std::string(home) + "/.config/default.cfg";
         if(loadConfigPath(p, audio, joystick)) { 
-            printf("INFO: Config carregado de: %s\n", p.c_str()); 
+            DebugLogger::info("Config carregado de: " + p); 
             return; 
         }
         std::string p2 = std::string(home) + "/.config/dropblocks.cfg";
         if(loadConfigPath(p2, audio, joystick)) { 
-            printf("INFO: Config carregado de: %s\n", p2.c_str()); 
+            DebugLogger::info("Config carregado de: " + p2); 
             return; 
         }
     }
-    printf("INFO: Nenhum config encontrado; usando padrões.\n");
+    DebugLogger::info("Nenhum config encontrado; usando padrões.");
 }
 
 
@@ -1417,6 +1485,439 @@ struct ComboSystem {
     }
 };
 
+// ===========================
+//   SISTEMA DE INPUT UNIFICADO
+// ===========================
+
+/**
+ * @brief Abstract input handler interface
+ * 
+ * Provides a unified interface for all input methods (keyboard, joystick, etc.)
+ */
+class InputHandler {
+public:
+    virtual ~InputHandler() = default;
+    
+    // Core input actions
+    virtual bool shouldMoveLeft() = 0;
+    virtual bool shouldMoveRight() = 0;
+    virtual bool shouldSoftDrop() = 0;
+    virtual bool shouldHardDrop() = 0;
+    virtual bool shouldRotateCCW() = 0;
+    virtual bool shouldRotateCW() = 0;
+    virtual bool shouldPause() = 0;
+    virtual bool shouldRestart() = 0;
+    virtual bool shouldQuit() = 0;
+    virtual bool shouldScreenshot() = 0;
+    
+    // System methods
+    virtual void update() = 0;
+    virtual bool isConnected() = 0;
+    virtual void resetTimers() = 0;
+};
+
+/**
+ * @brief Keyboard input handler
+ * 
+ * Handles keyboard input using SDL events
+ */
+class KeyboardInput : public InputHandler {
+private:
+    bool keyStates[SDL_NUM_SCANCODES] = {false};
+    bool lastKeyStates[SDL_NUM_SCANCODES] = {false};
+    Uint32 lastMoveTime = 0;
+    Uint32 moveRepeatDelay = 200;
+    
+public:
+    bool shouldMoveLeft() override {
+        return isKeyPressed(SDL_SCANCODE_LEFT) && SDL_GetTicks() - lastMoveTime > moveRepeatDelay;
+    }
+    
+    bool shouldMoveRight() override {
+        return isKeyPressed(SDL_SCANCODE_RIGHT) && SDL_GetTicks() - lastMoveTime > moveRepeatDelay;
+    }
+    
+    bool shouldSoftDrop() override {
+        return isKeyPressed(SDL_SCANCODE_DOWN);
+    }
+    
+    bool shouldHardDrop() override {
+        return isKeyPressed(SDL_SCANCODE_SPACE);
+    }
+    
+    bool shouldRotateCCW() override {
+        return isKeyPressed(SDL_SCANCODE_Z) || isKeyPressed(SDL_SCANCODE_UP);
+    }
+    
+    bool shouldRotateCW() override {
+        return isKeyPressed(SDL_SCANCODE_X);
+    }
+    
+    bool shouldPause() override {
+        return isKeyPressed(SDL_SCANCODE_P);
+    }
+    
+    bool shouldRestart() override {
+        return isKeyPressed(SDL_SCANCODE_RETURN);
+    }
+    
+    bool shouldQuit() override {
+        return isKeyPressed(SDL_SCANCODE_ESCAPE);
+    }
+    
+    bool shouldScreenshot() override {
+        return isKeyPressed(SDL_SCANCODE_F12);
+    }
+    
+    void update() override {
+        // Update key states
+        for (int i = 0; i < SDL_NUM_SCANCODES; i++) {
+            lastKeyStates[i] = keyStates[i];
+            keyStates[i] = SDL_GetKeyboardState(nullptr)[i];
+        }
+    }
+    
+    bool isConnected() override {
+        return true; // Keyboard is always available
+    }
+    
+    void resetTimers() override {
+        lastMoveTime = SDL_GetTicks();
+    }
+    
+private:
+    bool isKeyPressed(SDL_Scancode key) {
+        return keyStates[key] && !lastKeyStates[key];
+    }
+};
+
+/**
+ * @brief Joystick input handler
+ * 
+ * Handles joystick/controller input with analog and digital support
+ */
+class JoystickInput : public InputHandler {
+private:
+    SDL_Joystick* joystick = nullptr;
+    SDL_GameController* controller = nullptr;
+    int joystickId = -1;
+    bool isConnectedFlag = false;
+    
+    // Button mapping
+    int buttonLeft = 13;
+    int buttonRight = 11;
+    int buttonDown = 14;
+    int buttonUp = 12;
+    int buttonRotateCCW = 0;
+    int buttonRotateCW = 1;
+    int buttonSoftDrop = 2;
+    int buttonHardDrop = 3;
+    int buttonPause = 6;
+    int buttonStart = 7;
+    int buttonQuit = 8;
+    
+    // Analog settings
+    float analogDeadzone = 0.3f;
+    float analogSensitivity = 1.0f;
+    bool invertYAxis = false;
+    
+    // Button states
+    bool buttonStates[32] = {false};
+    bool lastButtonStates[32] = {false};
+    
+    // Analog states
+    float leftStickX = 0.0f;
+    float leftStickY = 0.0f;
+    float rightStickX = 0.0f;
+    float rightStickY = 0.0f;
+    
+    // Timers
+    Uint32 lastMoveTime = 0;
+    Uint32 moveRepeatDelay = 200;
+    Uint32 lastSoftDropTime = 0;
+    Uint32 softDropRepeatDelay = 100;
+    
+public:
+    bool shouldMoveLeft() override {
+        return isButtonPressed(buttonLeft) || 
+               (leftStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT));
+    }
+    
+    bool shouldMoveRight() override {
+        return isButtonPressed(buttonRight) || 
+               (leftStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT));
+    }
+    
+    bool shouldSoftDrop() override {
+        bool dpadDown = (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN));
+        bool analogDown = (leftStickY > analogDeadzone && SDL_GetTicks() - lastSoftDropTime > softDropRepeatDelay);
+        bool buttonPressed = isButtonPressed(buttonSoftDrop);
+        
+        if (dpadDown || analogDown || buttonPressed) {
+            lastSoftDropTime = SDL_GetTicks();
+            return true;
+        }
+        return false;
+    }
+    
+    bool shouldHardDrop() override {
+        return isButtonPressed(buttonHardDrop);
+    }
+    
+    bool shouldRotateCCW() override {
+        return isButtonPressed(buttonRotateCCW) || 
+               (rightStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)) ||
+               (leftStickY < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
+    }
+    
+    bool shouldRotateCW() override {
+        return isButtonPressed(buttonRotateCW) || 
+               (rightStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)) ||
+               (leftStickY < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
+    }
+    
+    bool shouldPause() override {
+        return isButtonPressed(buttonPause);
+    }
+    
+    bool shouldRestart() override {
+        return isButtonPressed(buttonStart);
+    }
+    
+    bool shouldQuit() override {
+        return isButtonPressed(buttonQuit);
+    }
+    
+    bool shouldScreenshot() override {
+        return false; // Screenshot not available on joystick
+    }
+    
+    void update() override {
+        if (!isConnectedFlag) return;
+        
+        // Update button states
+        for (int i = 0; i < 32; i++) {
+            lastButtonStates[i] = buttonStates[i];
+            if (controller) {
+                buttonStates[i] = SDL_GameControllerGetButton(controller, (SDL_GameControllerButton)i);
+            } else if (joystick) {
+                buttonStates[i] = SDL_JoystickGetButton(joystick, i);
+            }
+        }
+        
+        // Update analog
+        if (controller) {
+            leftStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX) / 32767.0f;
+            leftStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY) / 32767.0f;
+            if (invertYAxis) leftStickY = -leftStickY;
+            rightStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f;
+            rightStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
+            if (invertYAxis) rightStickY = -rightStickY;
+        } else if (joystick) {
+            leftStickX = SDL_JoystickGetAxis(joystick, 0) / 32767.0f;
+            leftStickY = SDL_JoystickGetAxis(joystick, 1) / 32767.0f;
+            if (invertYAxis) leftStickY = -leftStickY;
+            if (SDL_JoystickNumAxes(joystick) > 2) {
+                rightStickX = SDL_JoystickGetAxis(joystick, 2) / 32767.0f;
+                rightStickY = SDL_JoystickGetAxis(joystick, 3) / 32767.0f;
+                if (invertYAxis) rightStickY = -rightStickY;
+            }
+        }
+        
+        // Apply deadzone
+        if (std::abs(leftStickX) < analogDeadzone) leftStickX = 0.0f;
+        if (std::abs(leftStickY) < analogDeadzone) leftStickY = 0.0f;
+        if (std::abs(rightStickX) < analogDeadzone) rightStickX = 0.0f;
+        if (std::abs(rightStickY) < analogDeadzone) rightStickY = 0.0f;
+    }
+    
+    bool isConnected() override {
+        return isConnectedFlag;
+    }
+    
+    void resetTimers() override {
+        lastMoveTime = SDL_GetTicks();
+    }
+    
+    bool initialize() {
+        int numJoysticks = SDL_NumJoysticks();
+        if (numJoysticks > 0) {
+            if (SDL_IsGameController(0)) {
+                controller = SDL_GameControllerOpen(0);
+                if (controller) {
+                    joystick = SDL_GameControllerGetJoystick(controller);
+                    joystickId = 0;
+                    isConnectedFlag = true;
+                    printf("Game controller connected: %s\n", SDL_GameControllerName(controller));
+                    return true;
+                }
+            }
+            
+            joystick = SDL_JoystickOpen(0);
+            if (joystick) {
+                joystickId = 0;
+                isConnectedFlag = true;
+                printf("Joystick connected: %s\n", SDL_JoystickName(joystick));
+                return true;
+            }
+        }
+        
+        printf("No joystick/controller found\n");
+        return false;
+    }
+    
+    void cleanup() {
+        if (controller) {
+            SDL_GameControllerClose(controller);
+            controller = nullptr;
+        }
+        if (joystick) {
+            SDL_JoystickClose(joystick);
+            joystick = nullptr;
+        }
+        isConnectedFlag = false;
+    }
+    
+    // Configuration methods
+    void setButtonMapping(int left, int right, int down, int up, int rotCCW, int rotCW, 
+                         int softDrop, int hardDrop, int pause, int start, int quit) {
+        buttonLeft = left; buttonRight = right; buttonDown = down; buttonUp = up;
+        buttonRotateCCW = rotCCW; buttonRotateCW = rotCW;
+        buttonSoftDrop = softDrop; buttonHardDrop = hardDrop;
+        buttonPause = pause; buttonStart = start; buttonQuit = quit;
+    }
+    
+    void setAnalogSettings(float deadzone, float sensitivity, bool invertY) {
+        analogDeadzone = deadzone;
+        analogSensitivity = sensitivity;
+        invertYAxis = invertY;
+    }
+    
+    void setTiming(Uint32 moveDelay, Uint32 softDropDelay) {
+        moveRepeatDelay = moveDelay;
+        softDropRepeatDelay = softDropDelay;
+    }
+    
+private:
+    bool isButtonPressed(int button) {
+        if (button < 0 || button >= 32) return false;
+        return buttonStates[button] && !lastButtonStates[button];
+    }
+};
+
+/**
+ * @brief Input manager for handling multiple input sources
+ * 
+ * Manages multiple input handlers and provides unified input processing
+ */
+class InputManager {
+private:
+    std::vector<std::unique_ptr<InputHandler>> handlers;
+    InputHandler* primaryHandler = nullptr;
+    
+public:
+    void addHandler(std::unique_ptr<InputHandler> handler) {
+        handlers.push_back(std::move(handler));
+        if (!primaryHandler) {
+            primaryHandler = handlers.back().get();
+        }
+    }
+    
+    void setPrimaryHandler(InputHandler* handler) {
+        primaryHandler = handler;
+    }
+    
+    void update() {
+        for (auto& handler : handlers) {
+            handler->update();
+        }
+    }
+    
+    // Unified input methods - use primary handler or first available
+    InputHandler* getActiveHandler() {
+        if (primaryHandler && primaryHandler->isConnected()) {
+            return primaryHandler;
+        }
+        
+        for (auto& handler : handlers) {
+            if (handler->isConnected()) {
+                return handler.get();
+            }
+        }
+        
+        return nullptr;
+    }
+    
+    bool shouldMoveLeft() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldMoveLeft() : false;
+    }
+    
+    bool shouldMoveRight() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldMoveRight() : false;
+    }
+    
+    bool shouldSoftDrop() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldSoftDrop() : false;
+    }
+    
+    bool shouldHardDrop() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldHardDrop() : false;
+    }
+    
+    bool shouldRotateCCW() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldRotateCCW() : false;
+    }
+    
+    bool shouldRotateCW() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldRotateCW() : false;
+    }
+    
+    bool shouldPause() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldPause() : false;
+    }
+    
+    bool shouldRestart() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldRestart() : false;
+    }
+    
+    bool shouldQuit() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldQuit() : false;
+    }
+    
+    bool shouldScreenshot() {
+        auto handler = getActiveHandler();
+        return handler ? handler->shouldScreenshot() : false;
+    }
+    
+    void resetTimers() {
+        auto handler = getActiveHandler();
+        if (handler) handler->resetTimers();
+    }
+    
+    void cleanup() {
+        for (auto& handler : handlers) {
+            if (auto* joystick = dynamic_cast<JoystickInput*>(handler.get())) {
+                joystick->cleanup();
+            }
+        }
+        handlers.clear();
+        primaryHandler = nullptr;
+    }
+};
+
 // Estrutura para sistema de joystick
 struct JoystickSystem {
     SDL_Joystick* joystick = nullptr;
@@ -1827,142 +2328,91 @@ static void processPieceFall(GameState& state, AudioSystem& audio) {
     }
 }
 
-static void handleInput(GameState& state, AudioSystem& audio, SDL_Renderer* ren, JoystickSystem& joystick) {
-    // Atualizar estado do joystick
-    joystick.update();
+static void handleInput(GameState& state, AudioSystem& audio, SDL_Renderer* ren, InputManager& inputManager) {
+    // Atualizar todos os handlers de input
+    inputManager.update();
     
+    // Processar eventos SDL (apenas para quit e screenshot)
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) state.running = false;
-        if (e.type == SDL_KEYDOWN) {
-            SDL_Keycode k = e.key.keysym.sym;
-            if (k == SDLK_ESCAPE) { state.running = false; }
-            if (k == SDLK_F12) { 
-                // Gerar timestamp para nome do arquivo
-                time_t now = time(0);
-                struct tm* timeinfo = localtime(&now);
-                char filename[64];
-                strftime(filename, sizeof(filename), "dropblocks-screenshot_%Y-%m-%d_%H-%M-%S.bmp", timeinfo);
-                
-                if (saveScreenshot(ren, filename)) audio.playBeep(880.0, 80, 0.18f, false); 
-            }
-            if (k == SDLK_p) { 
-                state.paused = !state.paused; 
-                audio.playBeep(state.paused ? 440.0 : 520.0, 30, 0.12f, false); 
-            }
-            if (state.gameover) {
-                if (k == SDLK_RETURN) {
-                    for (auto& r : state.grid) for (auto& c : r) { c.occ = false; }
-                    state.score = 0; state.lines = 0; state.level = 0; state.tick_ms = TICK_MS_START;
-                    state.gameover = false; state.paused = false;
-                    initializeRandomizer(state);
-                    audio.playBeep(520.0, 40, 0.15f, false);
-                }
-                continue;
-            }
-            if (state.paused) continue;
-            
-            auto coll = [&](int dx, int dy, int drot) { return collides(state.act, state.grid, dx, dy, drot); };
-            if (k == SDLK_LEFT && !coll(-1, 0, 0)) {
-                state.act.x--;
-                audio.playMovementSound();
-            }
-            if (k == SDLK_RIGHT && !coll(1, 0, 0)) {
-                state.act.x++;
-                audio.playMovementSound();
-            }
-            if (k == SDLK_DOWN) {
-                // Soft drop
-                audio.playSoftDropSound();
-                processPieceFall(state, audio);
-            }
-            if (k == SDLK_SPACE) {
-                // Hard drop
-                while (!coll(0, 1, 0)) state.act.y++;
-                state.score += 2; // Bonus por hard drop
-                audio.playHardDropSound();
-                processPieceFall(state, audio);
-            }
-            if (k == SDLK_z || k == SDLK_UP) {
-                rotateWithKicks(state.act, state.grid, -1, audio);
-                audio.playRotationSound(false);  // CCW
-            }
-            if (k == SDLK_x) {
-                rotateWithKicks(state.act, state.grid, +1, audio);
-                audio.playRotationSound(true);   // CW
-            }
-        }
     }
     
-    // Processar controles de joystick (sempre, exceto para movimento durante pause)
-    if (joystick.isConnected) {
-        // Controles que funcionam sempre (pause, quit, etc.)
-        if (joystick.isButtonPressed(joystick.buttonPause)) {
-            state.paused = !state.paused;
-            audio.playBeep(state.paused ? 440.0 : 520.0, 30, 0.12f, false);
-        }
+    // Screenshot (apenas teclado)
+    if (inputManager.shouldScreenshot()) {
+        time_t now = time(0);
+        struct tm* timeinfo = localtime(&now);
+        char filename[64];
+        strftime(filename, sizeof(filename), "dropblocks-screenshot_%Y-%m-%d_%H-%M-%S.bmp", timeinfo);
         
-        // Quit removido para uso em kiosk
-        // if (joystick.isButtonPressed(joystick.buttonQuit)) {
-        //     state.running = false;
-        // }
-        
-        // Controles de jogo (só funcionam quando não pausado)
-        if (!state.paused) {
-            auto coll = [&](int dx, int dy, int drot) { return collides(state.act, state.grid, dx, dy, drot); };
-            
-            // Movimento esquerda
-            if (joystick.shouldMoveLeft() && !coll(-1, 0, 0)) {
-                state.act.x--;
-                audio.playMovementSound();
-                joystick.resetMoveTimer();
-            }
-            
-            // Movimento direita
-            if (joystick.shouldMoveRight() && !coll(1, 0, 0)) {
-                state.act.x++;
-                audio.playMovementSound();
-                joystick.resetMoveTimer();
-            }
-            
-            // Soft drop
-            if (joystick.shouldSoftDrop()) {
-                audio.playSoftDropSound();
-                processPieceFall(state, audio);
-            }
-            
-            // Hard drop
-            if (joystick.isButtonPressed(joystick.buttonHardDrop)) {
-                while (!coll(0, 1, 0)) state.act.y++;
-                state.score += 2; // Bonus por hard drop
-                audio.playHardDropSound();
-                processPieceFall(state, audio);
-            }
-            
-            // Rotação CCW
-            if (joystick.shouldRotateCCW()) {
-                rotateWithKicks(state.act, state.grid, -1, audio);
-                audio.playRotationSound(false);  // CCW
-                joystick.resetMoveTimer();
-            }
-            
-            // Rotação CW
-            if (joystick.shouldRotateCW()) {
-                rotateWithKicks(state.act, state.grid, +1, audio);
-                audio.playRotationSound(true);   // CW
-                joystick.resetMoveTimer();
-            }
-        }
+        if (saveScreenshot(ren, filename)) audio.playBeep(880.0, 80, 0.18f, false); 
     }
     
-    // Processar controles de joystick para game over
-    if (joystick.isConnected && state.gameover) {
-        if (joystick.isButtonPressed(joystick.buttonStart)) {
-            for (auto& r : state.grid) for (auto& c : r) { c.occ = false; }
-            state.score = 0; state.lines = 0; state.level = 0; state.tick_ms = TICK_MS_START;
-            state.gameover = false; state.paused = false;
-            initializeRandomizer(state);
-            audio.playBeep(520.0, 40, 0.15f, false);
+    // Quit
+    if (inputManager.shouldQuit()) {
+        state.running = false;
+    }
+    
+    // Pause
+    if (inputManager.shouldPause()) {
+        state.paused = !state.paused;
+        audio.playBeep(state.paused ? 440.0 : 520.0, 30, 0.12f, false);
+    }
+    
+    // Game Over - Restart
+    if (state.gameover && inputManager.shouldRestart()) {
+        for (auto& r : state.grid) for (auto& c : r) { c.occ = false; }
+        state.score = 0; state.lines = 0; state.level = 0; state.tick_ms = TICK_MS_START;
+        state.gameover = false; state.paused = false;
+        initializeRandomizer(state);
+        audio.playBeep(520.0, 40, 0.15f, false);
+        return;
+    }
+    
+    // Controles de jogo (só funcionam quando não pausado e não em game over)
+    if (!state.paused && !state.gameover) {
+        auto coll = [&](int dx, int dy, int drot) { return collides(state.act, state.grid, dx, dy, drot); };
+        
+        // Movimento esquerda
+        if (inputManager.shouldMoveLeft() && !coll(-1, 0, 0)) {
+            state.act.x--;
+            audio.playMovementSound();
+            inputManager.resetTimers();
+        }
+        
+        // Movimento direita
+        if (inputManager.shouldMoveRight() && !coll(1, 0, 0)) {
+            state.act.x++;
+            audio.playMovementSound();
+            inputManager.resetTimers();
+        }
+        
+        // Soft drop
+        if (inputManager.shouldSoftDrop()) {
+            audio.playSoftDropSound();
+            processPieceFall(state, audio);
+        }
+        
+        // Hard drop
+        if (inputManager.shouldHardDrop()) {
+            while (!coll(0, 1, 0)) state.act.y++;
+            state.score += 2; // Bonus por hard drop
+            audio.playHardDropSound();
+            processPieceFall(state, audio);
+        }
+        
+        // Rotação CCW
+        if (inputManager.shouldRotateCCW()) {
+            rotateWithKicks(state.act, state.grid, -1, audio);
+            audio.playRotationSound(false);  // CCW
+            inputManager.resetTimers();
+        }
+        
+        // Rotação CW
+        if (inputManager.shouldRotateCW()) {
+            rotateWithKicks(state.act, state.grid, +1, audio);
+            audio.playRotationSound(true);   // CW
+            inputManager.resetTimers();
         }
     }
 }
@@ -1998,21 +2448,33 @@ static void updateGame(GameState& state, AudioSystem& audio) {
 
 // Funções especializadas extraídas da main
 static bool initializeSDL() {
+    DebugLogger::debug("initializeSDL - Step 1: Initializing SDL VIDEO subsystem");
+    
     // Inicializar cada subsistema separadamente para maior compatibilidade
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        SDL_Log("SDL_INIT_VIDEO error: %s", SDL_GetError());
+        DebugLogger::error("SDL_INIT_VIDEO error: " + std::string(SDL_GetError()));
         return false;
     }
+    
+    DebugLogger::debug("initializeSDL - VIDEO subsystem initialized successfully");
+    
+    DebugLogger::debug("initializeSDL - Step 2: Initializing SDL TIMER subsystem");
     
     if (SDL_Init(SDL_INIT_TIMER) != 0) {
-        SDL_Log("SDL_INIT_TIMER error: %s", SDL_GetError());
+        DebugLogger::error("SDL_INIT_TIMER error: " + std::string(SDL_GetError()));
         return false;
     }
     
+    DebugLogger::debug("initializeSDL - TIMER subsystem initialized successfully");
+    
+    DebugLogger::debug("initializeSDL - Step 3: Initializing SDL EVENTS subsystem");
+    
     if (SDL_Init(SDL_INIT_EVENTS) != 0) {
-        SDL_Log("SDL_INIT_EVENTS error: %s", SDL_GetError());
+        DebugLogger::error("SDL_INIT_EVENTS error: " + std::string(SDL_GetError()));
         return false;
     }
+    
+    DebugLogger::debug("initializeSDL - EVENTS subsystem initialized successfully");
     
     // Áudio e gamepad são opcionais
     if (SDL_Init(SDL_INIT_AUDIO) != 0) {
@@ -2027,12 +2489,21 @@ static bool initializeSDL() {
         SDL_Log("Warning: SDL_INIT_JOYSTICK failed: %s", SDL_GetError());
     }
     
+    DebugLogger::debug("initializeSDL - All SDL subsystems initialized successfully");
+    
     return true;
 }
 
-static bool initializeGame(GameState& state, AudioSystem& audio, JoystickSystem& joystick) {
-    // Carregar configuração
-    loadConfigFile(audio, joystick);
+static bool initializeGame(GameState& state, AudioSystem& audio) {
+    DebugLogger::debug("initializeGame - Step 1: Creating temp JoystickSystem");
+    
+    // Carregar configuração (criar JoystickSystem temporário para compatibilidade)
+    JoystickSystem tempJoystick;
+    
+    DebugLogger::debug("initializeGame - Step 2: Loading config file");
+    loadConfigFile(audio, tempJoystick);
+    
+    DebugLogger::debug("initializeGame - Step 3: Config file loaded successfully");
     
     // Carregar peças
     bool piecesOk = loadPiecesFile();
@@ -2052,25 +2523,44 @@ static bool initializeGame(GameState& state, AudioSystem& audio, JoystickSystem&
 }
 
 static bool initializeWindow(SDL_Window*& win, SDL_Renderer*& ren) {
+    DebugLogger::debug("initializeWindow - Step 1: Getting display mode");
+    
     SDL_DisplayMode dm; 
-    SDL_GetCurrentDisplayMode(0, &dm);
+    if (SDL_GetCurrentDisplayMode(0, &dm) != 0) {
+        DebugLogger::error("Failed to get display mode: " + std::string(SDL_GetError()));
+        return false;
+    }
     int SW = dm.w, SH = dm.h;
+    
+    DebugLogger::debug("initializeWindow - Display mode: " + std::to_string(SW) + "x" + std::to_string(SH));
+    
+    DebugLogger::debug("initializeWindow - Step 2: Creating window");
     
     win = SDL_CreateWindow("DropBlocks", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SW, SH,
                           SDL_WINDOW_FULLSCREEN | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!win) { 
-        SDL_Log("Win error: %s", SDL_GetError()); 
+        DebugLogger::error("Failed to create window: " + std::string(SDL_GetError()));
         return false; 
     }
+    
+    DebugLogger::debug("initializeWindow - Window created successfully");
+    
+    DebugLogger::debug("initializeWindow - Step 3: Creating renderer");
     
     ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!ren) { 
-        SDL_Log("Ren error: %s", SDL_GetError()); 
+        DebugLogger::error("Failed to create renderer: " + std::string(SDL_GetError()));
         return false; 
     }
     
+    DebugLogger::debug("initializeWindow - Renderer created successfully");
+    
+    DebugLogger::debug("initializeWindow - Step 4: Hiding cursor");
+    
     // Esconder cursor do mouse
     SDL_ShowCursor(SDL_DISABLE);
+    
+    DebugLogger::debug("initializeWindow - Window initialization completed successfully");
     
     return true;
 }
@@ -2079,7 +2569,395 @@ static bool initializeWindow(SDL_Window*& win, SDL_Renderer*& ren) {
 static void initializeRandomizer(GameState& state);
 
 // ===========================
-//   FUNÇÕES DE RENDERIZAÇÃO
+//   SISTEMA DE RENDERIZAÇÃO MODULAR
+// ===========================
+
+/**
+ * @brief Abstract render layer interface
+ * 
+ * Provides a unified interface for all render layers with Z-order support
+ */
+class RenderLayer {
+public:
+    virtual ~RenderLayer() = default;
+    
+    // Core rendering method
+    virtual void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) = 0;
+    
+    // Layer ordering and visibility
+    virtual int getZOrder() const = 0;
+    virtual bool isEnabled() const { return true; }
+    virtual void setEnabled(bool enabled) { enabled_ = enabled; }
+    
+    // Layer identification
+    virtual std::string getName() const = 0;
+    
+protected:
+    bool enabled_ = true;
+};
+
+/**
+ * @brief Background render layer
+ * 
+ * Renders the game background
+ */
+class BackgroundLayer : public RenderLayer {
+public:
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
+        SDL_SetRenderDrawColor(renderer, THEME.bg_r, THEME.bg_g, THEME.bg_b, 255);
+        SDL_RenderClear(renderer);
+    }
+    
+    int getZOrder() const override { return 0; }
+    std::string getName() const override { return "Background"; }
+};
+
+/**
+ * @brief Banner render layer
+ * 
+ * Renders the game banner with title and effects
+ */
+class BannerLayer : public RenderLayer {
+private:
+    AudioSystem* audio_ = nullptr;
+    
+public:
+    BannerLayer(AudioSystem* audio) : audio_(audio) {}
+    
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
+        // Banner
+        drawRoundedFilled(renderer, layout.BX, layout.BY, layout.BW, layout.BH, 10, 
+                         THEME.banner_bg_r, THEME.banner_bg_g, THEME.banner_bg_b, 255);
+        drawRoundedOutline(renderer, layout.BX, layout.BY, layout.BW, layout.BH, 10, 2, 
+                          THEME.banner_outline_r, THEME.banner_outline_g, THEME.banner_outline_b, THEME.banner_outline_a);
+
+        // Título vertical
+        int bty = layout.BY + 10, cxText = layout.BX + (layout.BW - 5 * layout.scale) / 2;
+        for (size_t i = 0; i < TITLE_TEXT.size(); ++i) {
+            char ch = TITLE_TEXT[i];
+            if (ch == ' ') { bty += 6 * layout.scale; continue; }
+            ch = (char)std::toupper((unsigned char)ch);
+            if (ch < 'A' || ch > 'Z') ch = ' ';
+            drawPixelText(renderer, cxText, bty, std::string(1, ch), layout.scale, 
+                         THEME.banner_text_r, THEME.banner_text_g, THEME.banner_text_b);
+            bty += 9 * layout.scale;
+        }
+
+        // Sweep local do banner
+        if (ENABLE_BANNER_SWEEP) {
+            SDL_Rect clip{layout.BX, layout.BY, layout.BW, layout.BH};
+            SDL_RenderSetClipRect(renderer, &clip);
+            
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+            
+            int bandH = SWEEP_BAND_H_S * layout.scale;
+            int total = layout.BH + bandH;
+            float tsec = SDL_GetTicks() / 1000.0f;
+            int sweepY = (int)std::fmod(tsec * SWEEP_SPEED_PXPS, (float)total) - bandH;
+            for (int i = 0; i < bandH; ++i) {
+                float normalizedPos = (float)i / (float)bandH;
+                float center = 0.5f;
+                float distance = (normalizedPos - center) * 2.0f;
+                float sigma = 0.3f + (1.0f - SWEEP_SOFTNESS) * 0.4f;
+                float softness = std::exp(-(distance * distance) / (2.0f * sigma * sigma));
+                Uint8 a = (Uint8)std::round(SWEEP_ALPHA_MAX * softness);
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, a);
+                SDL_Rect line{layout.BX, layout.BY + sweepY + i, layout.BW, 1};
+                SDL_RenderFillRect(renderer, &line);
+            }
+            
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+            SDL_RenderSetClipRect(renderer, nullptr);
+            
+            if (audio_) audio_->playSweepEffect();
+        }
+    }
+    
+    int getZOrder() const override { return 1; }
+    std::string getName() const override { return "Banner"; }
+};
+
+/**
+ * @brief Board render layer
+ * 
+ * Renders the game board with pieces
+ */
+class BoardLayer : public RenderLayer {
+public:
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
+        // Tabuleiro vazio
+        for (int y = 0; y < ROWS; ++y) {
+            for (int x = 0; x < COLS; ++x) {
+                SDL_Rect r{layout.GX + x * layout.cellBoard, layout.GY + y * layout.cellBoard, 
+                          layout.cellBoard - 1, layout.cellBoard - 1};
+                SDL_SetRenderDrawColor(renderer, THEME.board_empty_r, THEME.board_empty_g, THEME.board_empty_b, 255);
+                SDL_RenderFillRect(renderer, &r);
+            }
+        }
+
+        // Peças fixas
+        for (int y = 0; y < ROWS; ++y) {
+            for (int x = 0; x < COLS; ++x) {
+                if (state.grid[y][x].occ) {
+                    SDL_Rect r{layout.GX + x * layout.cellBoard, layout.GY + y * layout.cellBoard, 
+                              layout.cellBoard - 1, layout.cellBoard - 1};
+                    SDL_SetRenderDrawColor(renderer, state.grid[y][x].r, state.grid[y][x].g, state.grid[y][x].b, 255);
+                    SDL_RenderFillRect(renderer, &r);
+                }
+            }
+        }
+
+        // Peça ativa
+        auto& pc = PIECES[state.act.idx];
+        for (auto [px, py] : pc.rot[state.act.rot]) {
+            SDL_Rect r{layout.GX + (state.act.x + px) * layout.cellBoard, 
+                      layout.GY + (state.act.y + py) * layout.cellBoard, 
+                      layout.cellBoard - 1, layout.cellBoard - 1};
+            SDL_SetRenderDrawColor(renderer, pc.r, pc.g, pc.b, 255); 
+            SDL_RenderFillRect(renderer, &r);
+        }
+    }
+    
+    int getZOrder() const override { return 2; }
+    std::string getName() const override { return "Board"; }
+};
+
+/**
+ * @brief HUD render layer
+ * 
+ * Renders the game HUD with score, level, and next piece
+ */
+class HUDLayer : public RenderLayer {
+public:
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
+        // Painel (HUD)
+        drawRoundedFilled(renderer, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 
+                         THEME.panel_fill_r, THEME.panel_fill_g, THEME.panel_fill_b, 255);
+        drawRoundedOutline(renderer, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 2, 
+                          THEME.panel_outline_r, THEME.panel_outline_g, THEME.panel_outline_b, THEME.panel_outline_a);
+
+        // HUD textos
+        int tx = layout.panelX + 14, ty = layout.panelY + 14;
+        drawPixelText(renderer, tx, ty, "SCORE", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 10 * layout.scale;
+        drawPixelText(renderer, tx, ty, fmtScore(state.score), layout.scale + 1, THEME.hud_score_r, THEME.hud_score_g, THEME.hud_score_b); ty += 12 * (layout.scale + 1);
+        drawPixelText(renderer, tx, ty, "LINES", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
+        drawPixelText(renderer, tx, ty, std::to_string(state.lines), layout.scale, THEME.hud_lines_r, THEME.hud_lines_g, THEME.hud_lines_b); ty += 10 * layout.scale;
+        drawPixelText(renderer, tx, ty, "LEVEL", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
+        drawPixelText(renderer, tx, ty, std::to_string(state.level), layout.scale, THEME.hud_level_r, THEME.hud_level_g, THEME.hud_level_b); ty += 10 * layout.scale;
+
+        // NEXT (quadro PREVIEW_GRID × PREVIEW_GRID)
+        int boxW = layout.panelW - 28;
+        int boxH = std::min(layout.panelH - (ty - layout.panelY) - 14, boxW);
+        int boxX = layout.panelX + 14;
+        int boxY = ty;
+
+        drawRoundedFilled(renderer, boxX, boxY, boxW, boxH, 10, THEME.next_fill_r, THEME.next_fill_g, THEME.next_fill_b, 255);
+        drawRoundedOutline(renderer, boxX, boxY, boxW, boxH, 10, 2, THEME.next_outline_r, THEME.next_outline_g, THEME.next_outline_b, THEME.next_outline_a);
+
+        drawPixelText(renderer, boxX + 10, boxY + 10, "NEXT", layout.scale, THEME.next_label_r, THEME.next_label_g, THEME.next_label_b);
+
+        int padIn = 14 + 4 * layout.scale;
+        int innerX = boxX + 10, innerY = boxY + padIn;
+        int innerW = boxW - 20, innerH = boxH - padIn - 10;
+
+        int gridCols = PREVIEW_GRID, gridRows = PREVIEW_GRID;
+        int cellMini = std::min(innerW / gridCols, innerH / gridRows);
+        if (cellMini < 1) cellMini = 1;
+        if (cellMini > layout.cellBoard) cellMini = layout.cellBoard;
+
+        int gridW = cellMini * gridCols, gridH = cellMini * gridRows;
+        int gridX = innerX + (innerW - gridW) / 2;
+        int gridY = innerY + (innerH - gridH) / 2;
+
+        // quadriculado
+        for (int gy = 0; gy < gridRows; ++gy) {
+            for (int gx = 0; gx < gridCols; ++gx) {
+                SDL_Rect q{gridX + gx * cellMini, gridY + gy * cellMini, cellMini - 1, cellMini - 1};
+                bool isLight = ((gx + gy) & 1) != 0;
+                if (THEME.next_grid_use_rgb) {
+                    if (isLight)
+                        SDL_SetRenderDrawColor(renderer, THEME.next_grid_light_r, THEME.next_grid_light_g, THEME.next_grid_light_b, 255);
+                    else
+                        SDL_SetRenderDrawColor(renderer, THEME.next_grid_dark_r, THEME.next_grid_dark_g, THEME.next_grid_dark_b, 255);
+                } else {
+                    Uint8 v = isLight ? THEME.next_grid_light : THEME.next_grid_dark;
+                    SDL_SetRenderDrawColor(renderer, v, v, v, 255);
+                }
+                SDL_RenderFillRect(renderer, &q);
+            }
+        }
+
+        // peça próxima centrada
+        {
+            auto& np = PIECES[state.nextIdx];
+            int minx = 999, maxx = -999, miny = 999, maxy = -999;
+            for (auto [px, py] : np.rot[0]) { 
+                minx = std::min(minx, px); maxx = std::max(maxx, px); 
+                miny = std::min(miny, py); maxy = std::max(maxy, py); 
+            }
+            int pw = (maxx - minx + 1), ph = (maxy - miny + 1);
+            int offX = (gridCols - pw) / 2 - minx;
+            int offY = (gridRows - ph) / 2 - miny;
+            for (auto [px, py] : np.rot[0]) {
+                SDL_Rect r{gridX + (px + offX) * cellMini, gridY + (py + offY) * cellMini, cellMini - 1, cellMini - 1};
+                SDL_SetRenderDrawColor(renderer, np.r, np.g, np.b, 255); 
+                SDL_RenderFillRect(renderer, &r);
+            }
+        }
+    }
+    
+    int getZOrder() const override { return 3; }
+    std::string getName() const override { return "HUD"; }
+};
+
+/**
+ * @brief Overlay render layer
+ * 
+ * Renders game overlays (pause, game over)
+ */
+class OverlayLayer : public RenderLayer {
+public:
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
+        if (state.gameover || state.paused) {
+            const std::string topText = state.paused ? "PAUSE" : "GAME OVER";
+            const std::string subText = state.paused ? "" : "PRESS START";
+            int topW = textWidthPx(topText, layout.scale + 2);
+            int subW = subText.empty() ? 0 : textWidthPx(subText, layout.scale);
+            int textW = std::max(topW, subW);
+            int padX = 24, padY = 20;
+            int textH = 7 * (layout.scale + 2) + (subText.empty() ? 0 : (8 * layout.scale + 7 * layout.scale));
+            int ow = textW + padX * 2, oh = textH + padY * 2;
+            int ox = layout.GX + (layout.GW - ow) / 2, oy = layout.GY + (layout.GH - oh) / 2;
+            drawRoundedFilled(renderer, ox, oy, ow, oh, 14, THEME.overlay_fill_r, THEME.overlay_fill_g, THEME.overlay_fill_b, THEME.overlay_fill_a);
+            drawRoundedOutline(renderer, ox, oy, ow, oh, 14, 2, THEME.overlay_outline_r, THEME.overlay_outline_g, THEME.overlay_outline_b, THEME.overlay_outline_a);
+            int txc = ox + (ow - topW) / 2, tyc = oy + padY;
+            drawPixelTextOutlined(renderer, txc, tyc, topText, layout.scale + 2, THEME.overlay_top_r, THEME.overlay_top_g, THEME.overlay_top_b, 0, 0, 0);
+            if (!subText.empty()) {
+                int sx = ox + (ow - subW) / 2, sy = tyc + 7 * (layout.scale + 2) + 8 * layout.scale;
+                drawPixelTextOutlined(renderer, sx, sy, subText, layout.scale, THEME.overlay_sub_r, THEME.overlay_sub_g, THEME.overlay_sub_b, 0, 0, 0);
+            }
+        }
+    }
+    
+    int getZOrder() const override { return 4; }
+    std::string getName() const override { return "Overlay"; }
+};
+
+/**
+ * @brief Post-effects render layer
+ * 
+ * Renders screen effects like scanlines and global sweep
+ */
+class PostEffectsLayer : public RenderLayer {
+private:
+    AudioSystem* audio_ = nullptr;
+    
+public:
+    PostEffectsLayer(AudioSystem* audio) : audio_(audio) {}
+    
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
+        // Scanlines
+        if (SCANLINE_ALPHA > 0) {
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, (Uint8)SCANLINE_ALPHA);
+            for (int y = 0; y < layout.SHr; y += 2) { 
+                SDL_Rect sl{0, y, layout.SWr, 1}; 
+                SDL_RenderFillRect(renderer, &sl); 
+            }
+            
+            if (audio_) audio_->playScanlineEffect();
+        }
+
+        // SWEEP GLOBAL (clareia)
+        if (ENABLE_GLOBAL_SWEEP) {
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+            float tsec = SDL_GetTicks() / 1000.0f;
+            int bandH = SWEEP_G_BAND_H_PX;
+            int total = layout.SHr + bandH;
+            int sweepY = (int)std::fmod(tsec * SWEEP_G_SPEED_PXPS, (float)total) - bandH;
+            for (int i = 0; i < bandH; ++i) {
+                float normalizedPos = (float)i / (float)bandH;
+                float center = 0.5f;
+                float distance = (normalizedPos - center) * 2.0f;
+                float sigma = 0.3f + (1.0f - SWEEP_G_SOFTNESS) * 0.4f;
+                float softness = std::exp(-(distance * distance) / (2.0f * sigma * sigma));
+                Uint8 a = (Uint8)std::round(SWEEP_G_ALPHA_MAX * softness);
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, a);
+                SDL_Rect line{0, sweepY + i, layout.SWr, 1};
+                SDL_RenderFillRect(renderer, &line);
+            }
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        }
+    }
+    
+    int getZOrder() const override { return 5; }
+    std::string getName() const override { return "PostEffects"; }
+};
+
+/**
+ * @brief Render manager for handling multiple render layers
+ * 
+ * Manages render layers with Z-order and provides unified rendering
+ */
+class RenderManager {
+private:
+    std::vector<std::unique_ptr<RenderLayer>> layers_;
+    SDL_Renderer* renderer_ = nullptr;
+    
+public:
+    RenderManager(SDL_Renderer* renderer) : renderer_(renderer) {}
+    
+    void addLayer(std::unique_ptr<RenderLayer> layer) {
+        layers_.push_back(std::move(layer));
+        // Sort by Z-order
+        std::sort(layers_.begin(), layers_.end(), 
+                 [](const std::unique_ptr<RenderLayer>& a, const std::unique_ptr<RenderLayer>& b) {
+                     return a->getZOrder() < b->getZOrder();
+                 });
+    }
+    
+    void render(const GameState& state, const LayoutCache& layout) {
+        for (auto& layer : layers_) {
+            if (layer->isEnabled()) {
+                layer->render(renderer_, state, layout);
+            }
+        }
+    }
+    
+    void setLayerEnabled(const std::string& name, bool enabled) {
+        for (auto& layer : layers_) {
+            if (layer->getName() == name) {
+                layer->setEnabled(enabled);
+                break;
+            }
+        }
+    }
+    
+    void cleanup() {
+        layers_.clear();
+    }
+    
+    // Getters for specific layers
+    RenderLayer* getLayer(const std::string& name) {
+        for (auto& layer : layers_) {
+            if (layer->getName() == name) {
+                return layer.get();
+            }
+        }
+        return nullptr;
+    }
+    
+    std::vector<std::string> getLayerNames() const {
+        std::vector<std::string> names;
+        for (const auto& layer : layers_) {
+            names.push_back(layer->getName());
+        }
+        return names;
+    }
+};
+
+// ===========================
+//   FUNÇÕES DE RENDERIZAÇÃO (LEGADO - MANTIDAS PARA COMPATIBILIDADE)
 // ===========================
 
 static void renderBackground(SDL_Renderer* ren, const LayoutCache& layout) {
@@ -2331,54 +3209,65 @@ int main(int, char**) {
     fflush(stdout);
 
     // Inicialização
-    printf("DEBUG: Step 1 - Initializing SDL2...\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 1 - Initializing SDL2...");
     if (!initializeSDL()) return 1;
-    printf("DEBUG: Step 1 - SDL2 initialized successfully\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 1 - SDL2 initialized successfully");
     
-    printf("DEBUG: Step 2 - Initializing AudioSystem...\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 2 - Initializing AudioSystem...");
     AudioSystem audio;
     if (!audio.initialize()) {
-        printf("Warning: Audio initialization failed, continuing without sound\n");
+        DebugLogger::warning("Audio initialization failed, continuing without sound");
     }
-    printf("DEBUG: Step 2 - AudioSystem initialized\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 2 - AudioSystem initialized");
     
-    printf("DEBUG: Step 2.5 - Initializing JoystickSystem...\n");
-    fflush(stdout);
-    JoystickSystem joystick;
-    if (!joystick.initialize()) {
-        printf("Warning: No joystick/controller found, continuing with keyboard only\n");
+    DebugLogger::debug("Step 2.5 - Initializing InputManager...");
+    InputManager inputManager;
+    
+    // Adicionar keyboard input (sempre disponível)
+    auto keyboardInput = std::make_unique<KeyboardInput>();
+    inputManager.addHandler(std::move(keyboardInput));
+    
+    // Tentar adicionar joystick input
+    auto joystickInput = std::make_unique<JoystickInput>();
+    if (joystickInput->initialize()) {
+        inputManager.addHandler(std::move(joystickInput));
+        DebugLogger::info("Joystick/controller input enabled");
+    } else {
+        DebugLogger::warning("No joystick/controller found, continuing with keyboard only");
     }
-    printf("DEBUG: Step 2.5 - JoystickSystem initialized\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 2.5 - InputManager initialized");
     
-    printf("DEBUG: Step 3 - Initializing GameState...\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 3 - Initializing GameState...");
     GameState state;
-    if (!initializeGame(state, audio, joystick)) return 1;
-    printf("DEBUG: Step 3 - GameState initialized successfully\n");
-    fflush(stdout);
+    if (!initializeGame(state, audio)) return 1;
+    DebugLogger::debug("Step 3 - GameState initialized successfully");
     
-    printf("DEBUG: Step 4 - Initializing Window...\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 4 - Initializing Window...");
     SDL_Window* win = nullptr;
     SDL_Renderer* ren = nullptr;
     if (!initializeWindow(win, ren)) return 1;
-    printf("DEBUG: Step 4 - Window initialized successfully\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 4 - Window initialized successfully");
     
-    printf("DEBUG: Step 5 - Initializing Randomizer...\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 4.5 - Initializing RenderManager...");
+    RenderManager renderManager(ren);
+    
+    // Adicionar camadas de renderização
+    renderManager.addLayer(std::make_unique<BackgroundLayer>());
+    renderManager.addLayer(std::make_unique<BannerLayer>(&audio));
+    renderManager.addLayer(std::make_unique<BoardLayer>());
+    renderManager.addLayer(std::make_unique<HUDLayer>());
+    renderManager.addLayer(std::make_unique<OverlayLayer>());
+    renderManager.addLayer(std::make_unique<PostEffectsLayer>(&audio));
+    
+    DebugLogger::debug("Step 4.5 - RenderManager initialized with " + std::to_string(renderManager.getLayerNames().size()) + " layers");
+    
+    DebugLogger::debug("Step 5 - Initializing Randomizer...");
     initializeRandomizer(state);
-    printf("DEBUG: Step 5 - Randomizer initialized successfully\n");
-    fflush(stdout);
+    DebugLogger::debug("Step 5 - Randomizer initialized successfully");
 
     // Loop principal
     while (state.running) {
-        handleInput(state, audio, ren, joystick);
+        handleInput(state, audio, ren, inputManager);
         updateGame(state, audio);
 
         // Cache de layout
@@ -2387,20 +3276,16 @@ int main(int, char**) {
             layout.calculate();
         }
 
-        // Renderização modular
-        renderBackground(ren, layout);
-        renderBanner(ren, layout, audio);
-        renderBoard(ren, state, layout);
-        renderHUD(ren, state, layout);
-        renderOverlay(ren, state, layout);
-        renderPostEffects(ren, layout, audio);
+        // Renderização modular usando RenderManager
+        renderManager.render(state, layout);
 
         SDL_RenderPresent(ren);
         SDL_Delay(1);
     }
 
     // Cleanup
-    joystick.cleanup();
+    renderManager.cleanup();
+    inputManager.cleanup();
     audio.cleanup();
     SDL_DestroyRenderer(ren); 
     SDL_DestroyWindow(win); 
