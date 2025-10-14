@@ -1,6 +1,6 @@
 [SET]
 NAME = Tetris Original
-PREVIEWGRID = 4
+PREVIEWGRID = 6
 
 [RANDOMIZER]
 TYPE = bag

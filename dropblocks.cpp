@@ -171,9 +171,13 @@ static const int ROWS = 20;
 /** @brief Border size around the game board */
 static const int BORDER = 10;
 /** @brief Initial game tick interval in milliseconds */
-static const int TICK_MS_START = 600;
+static int TICK_MS_START = 400;
 /** @brief Minimum game tick interval in milliseconds */
-static const int TICK_MS_MIN   = 120;
+static int TICK_MS_MIN   = 80;
+/** @brief Speed acceleration per level (ms reduction) */
+static int SPEED_ACCELERATION = 50;
+/** @brief Aspect ratio correction factor for LED screen distortion */
+static float ASPECT_CORRECTION_FACTOR = 0.75f;
 /** @brief Lines required to advance to next level */
 static const int LEVEL_STEP    = 10;
 
@@ -762,7 +766,6 @@ static bool processPieceProperty(Piece& cur, const std::string& key, const std::
 
 static bool loadPiecesFromStream(std::istream& in) {
     PIECES.clear(); 
-    PREVIEW_GRID = 6; 
     RAND_TYPE = RandType::SIMPLE; 
     RAND_BAG_SIZE = 0;
 
@@ -827,7 +830,7 @@ static bool loadPiecesFromStream(std::istream& in) {
         } else {
             if (section == "SET") {
                 if (K == "NAME") { /* opcional */ continue; }
-                if (K == "PREVIEWGRID") { 
+                if (K == "PREVIEWGRID" || K == "PREVIEW_GRID") { 
                     int n; 
                     if (parseInt(v, n) && n > 0 && n <= 10) PREVIEW_GRID = n; 
                     continue; 
@@ -1437,6 +1440,7 @@ struct JoystickSystem {
     // Configurações de analógico
     float analogDeadzone = 0.3f;  // Zona morta para analógico
     float analogSensitivity = 1.0f; // Sensibilidade do analógico
+    bool invertYAxis = false;     // Inverter eixo Y (padrão: false)
     
     // Estado dos botões (para detecção de pressionamento)
     bool buttonStates[32] = {false};
@@ -1501,14 +1505,18 @@ struct JoystickSystem {
         if (controller) {
             leftStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX) / 32767.0f;
             leftStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY) / 32767.0f;
+            if (invertYAxis) leftStickY = -leftStickY; // Aplicar inversão se configurado
             rightStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f;
             rightStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
+            if (invertYAxis) rightStickY = -rightStickY; // Aplicar inversão se configurado
         } else if (joystick) {
             leftStickX = SDL_JoystickGetAxis(joystick, 0) / 32767.0f;
             leftStickY = SDL_JoystickGetAxis(joystick, 1) / 32767.0f;
+            if (invertYAxis) leftStickY = -leftStickY; // Aplicar inversão se configurado
             if (SDL_JoystickNumAxes(joystick) > 2) {
                 rightStickX = SDL_JoystickGetAxis(joystick, 2) / 32767.0f;
                 rightStickY = SDL_JoystickGetAxis(joystick, 3) / 32767.0f;
+                if (invertYAxis) rightStickY = -rightStickY; // Aplicar inversão se configurado
             }
         }
         
@@ -1532,15 +1540,13 @@ struct JoystickSystem {
     bool shouldMoveLeft() {
         return isButtonPressed(buttonLeft) || 
                (leftStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) ||
-               (leftStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT));
     }
     
     bool shouldMoveRight() {
         return isButtonPressed(buttonRight) || 
                (leftStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) ||
-               (leftStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
+               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT));
     }
     
     bool shouldMoveDown() {
@@ -1631,6 +1637,12 @@ static bool processJoystickConfigs(const std::string& key, const std::string& va
     // Configurações de analógico
     if (setf("JOYSTICK_ANALOG_DEADZONE", joystick.analogDeadzone)) { processedLines++; return true; }
     if (setf("JOYSTICK_ANALOG_SENSITIVITY", joystick.analogSensitivity)) { processedLines++; return true; }
+    if (key == "JOYSTICK_INVERT_Y_AXIS") {
+        int v = std::atoi(val.c_str());
+        joystick.invertYAxis = (v != 0);
+        processedLines++;
+        return true;
+    }
     
     // Configurações de timing
     if (key == "JOYSTICK_MOVE_REPEAT_DELAY") {
@@ -1649,6 +1661,15 @@ static bool processJoystickConfigs(const std::string& key, const std::string& va
             return true;
         }
     }
+    
+    // Configurações de velocidade do jogo
+    if (seti("GAME_SPEED_START_MS", TICK_MS_START)) { processedLines++; return true; }
+    if (seti("GAME_SPEED_MIN_MS", TICK_MS_MIN)) { processedLines++; return true; }
+    if (seti("GAME_SPEED_ACCELERATION", SPEED_ACCELERATION)) { processedLines++; return true; }
+    
+    // Configurações de renderização
+    if (setf("ASPECT_CORRECTION_FACTOR", ASPECT_CORRECTION_FACTOR)) { processedLines++; return true; }
+    if (seti("PREVIEW_GRID", PREVIEW_GRID)) { processedLines++; return true; }
     
     return false;
 }
@@ -1711,14 +1732,18 @@ struct LayoutCache {
         SWr = dmNow.w; 
         SHr = dmNow.h;
         
-        if (SWr * 2 >= SHr * 3) { 
+        // Compensação para tela LED 1920x1080 comprimida 3:2
+        // Ajustar para usar melhor a tela 16:9
+        if (SWr * 9 >= SHr * 16) { 
+            // Tela mais larga que 16:9 - usar altura completa
             CH = SHr; 
-            CW = (CH * 3) / 2; 
+            CW = (CH * 16) / 9;  // Proporção 16:9
             CX = (SWr - CW) / 2; 
             CY = 0; 
         } else { 
+            // Tela mais alta que 16:9 - usar largura completa
             CW = SWr; 
-            CH = (CW * 2) / 3; 
+            CH = (CW * 9) / 16;  // Proporção 16:9
             CX = 0; 
             CY = (SHr - CH) / 2; 
         }
@@ -1730,7 +1755,12 @@ struct LayoutCache {
         bannerW = 8 * scale + 24;
         panelTarget = (int)(CW * 0.28);
         usableLeftW = CW - (BORDER + bannerW + GAP1) - panelTarget - GAP2;
-        cellBoard = std::min(std::max(8, usableLeftW / COLS), (CH - 2 * BORDER) / ROWS);
+        // Compensação para distorção 3:2 da tela LED (comprime 16:9 para 3:2)
+        int cellW = usableLeftW / COLS;
+        int cellH = (CH - 2 * BORDER) / ROWS;
+        // Aplicar fator de correção para compensar compressão vertical
+        cellH = (int)(cellH * ASPECT_CORRECTION_FACTOR);
+        cellBoard = std::min(std::max(8, cellW), cellH);
         GW = cellBoard * COLS; 
         GH = cellBoard * ROWS;
         
@@ -1778,7 +1808,7 @@ static void processPieceFall(GameState& state, AudioSystem& audio) {
             int lv = state.lines / LEVEL_STEP; 
             if (lv > state.level) { 
                 state.level = lv; 
-                state.tick_ms = std::max(TICK_MS_MIN, TICK_MS_START - state.level * 40);
+                state.tick_ms = std::max(TICK_MS_MIN, TICK_MS_START - state.level * SPEED_ACCELERATION);
                 audio.playLevelUpSound();  // Som de level up
             }
         } else {
@@ -2295,7 +2325,7 @@ static void renderPostEffects(SDL_Renderer* ren, const LayoutCache& layout, Audi
  */
 int main(int, char**) {
     printf("=== DROPBLOCKS STARTING ===\n");
-    printf("VERSION: 5.1 - Granular Debugging\n");
+    printf("VERSION: 5.2 - Configurable Speed & Aspect Correction\n");
     printf("BUILD: %s %s\n", __DATE__, __TIME__);
     printf("FIXES: Added step-by-step debugging to identify exact crash location\n");
     fflush(stdout);

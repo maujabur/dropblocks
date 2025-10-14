@@ -1,6 +1,6 @@
 [SET]
 NAME = Default Pieces
-PREVIEWGRID = 4
+PREVIEWGRID = 6
 
 [RANDOMIZER]
 TYPE = simple
