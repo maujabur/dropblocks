@@ -47,6 +47,13 @@
 #include <string>
 #include <ctime>
 #include <cstdlib>
+
+// ===========================
+//   DEFINIÇÕES DE VERSÃO
+// ===========================
+#define DROPBLOCKS_VERSION "6.4"
+#define DROPBLOCKS_BUILD_INFO "Debug Cleanup + Input Fixes"
+#define DROPBLOCKS_FEATURES "Refactored JoystickSystem, InputManager, ConfigManager, RenderManager, Clean Logs"
 #include <algorithm>
 #include <cmath>
 #include <cctype>
@@ -56,6 +63,7 @@
 #include <random>
 #include <array>
 #include <memory>
+#include <map>
 
 // ===========================
 //   SISTEMA DE DEBUG
@@ -106,6 +114,370 @@ public:
 bool DebugLogger::enabled_ = true;
 int DebugLogger::level_ = DebugLogger::DEBUG;
 
+// ===========================
+//   SISTEMA DE CONFIGURAÇÃO MODULAR
+// ===========================
+
+/**
+ * @brief RGB color structure
+ */
+struct RGB { Uint8 r,g,b; };
+
+/**
+ * @brief Visual configuration structure
+ * 
+ * Contains all visual theme settings including colors, effects, and layout
+ */
+struct VisualConfig {
+    // Colors
+    struct Colors {
+        RGB background{8, 8, 12};
+        RGB boardEmpty{28, 28, 36};
+        RGB panelFill{24, 24, 32};
+        RGB panelOutline{90, 90, 120};
+        Uint8 panelOutlineAlpha = 200;
+        
+        // Banner
+        RGB bannerBg{0, 40, 0};
+        RGB bannerOutline{0, 60, 0};
+        Uint8 bannerOutlineAlpha = 180;
+        RGB bannerText{120, 255, 120};
+        
+        // HUD
+        RGB hudLabel{200, 200, 220};
+        RGB hudScore{255, 240, 120};
+        RGB hudLines{180, 255, 180};
+        RGB hudLevel{180, 200, 255};
+        
+        // NEXT
+        RGB nextFill{18, 18, 26};
+        RGB nextOutline{80, 80, 110};
+        Uint8 nextOutlineAlpha = 160;
+        RGB nextLabel{220, 220, 220};
+        RGB nextGridDark{24, 24, 24};
+        RGB nextGridLight{30, 30, 30};
+        bool nextGridUseRgb = false;
+        
+        // Overlay
+        RGB overlayFill{0, 0, 0};
+        Uint8 overlayFillAlpha = 200;
+        RGB overlayOutline{200, 200, 220};
+        Uint8 overlayOutlineAlpha = 120;
+        RGB overlayTop{255, 160, 160};
+        RGB overlaySub{220, 220, 220};
+    } colors;
+    
+    // Effects
+    struct Effects {
+        bool bannerSweep = true;
+        bool globalSweep = true;
+        float sweepSpeedPxps = 15.0f;
+        int sweepBandHS = 30;
+        int sweepAlphaMax = 100;
+        float sweepSoftness = 0.7f;
+        float sweepGSpeedPxps = 20.0f;
+        int sweepGBandHPx = 100;
+        int sweepGAlphaMax = 50;
+        float sweepGSoftness = 0.9f;
+        int scanlineAlpha = 20;
+    } effects;
+    
+    // Layout
+    struct Layout {
+        int roundedPanels = 1;
+        int hudFixedScale = 4;
+        int gap1Scale = 10;
+        int gap2Scale = 10;
+    } layout;
+    
+    // Text
+    std::string titleText = "---H A C K T R I S";
+};
+
+/**
+ * @brief Audio configuration structure
+ * 
+ * Contains all audio settings including volumes and sound toggles
+ */
+struct AudioConfig {
+    float masterVolume = 1.0f;
+    float sfxVolume = 0.8f;
+    float ambientVolume = 1.0f;
+    bool enableMovementSounds = true;
+    bool enableAmbientSounds = true;
+    bool enableComboSounds = true;
+    bool enableLevelUpSounds = true;
+};
+
+/**
+ * @brief Input configuration structure
+ * 
+ * Contains all input settings including joystick and keyboard
+ */
+struct InputConfig {
+    // Joystick button mapping
+    int buttonLeft = 13;
+    int buttonRight = 11;
+    int buttonDown = 14;
+    int buttonUp = 12;
+    int buttonRotateCCW = 0;
+    int buttonRotateCW = 1;
+    int buttonSoftDrop = 2;
+    int buttonHardDrop = 3;
+    int buttonPause = 6;
+    int buttonStart = 7;
+    int buttonQuit = 8;
+    
+    // Analog settings
+    float analogDeadzone = 0.3f;
+    float analogSensitivity = 1.0f;
+    bool invertYAxis = false;
+    
+    // Timing
+    Uint32 moveRepeatDelay = 200;
+    Uint32 softDropRepeatDelay = 100;
+};
+
+/**
+ * @brief Pieces configuration structure
+ * 
+ * Contains all piece-related settings
+ */
+struct PiecesConfig {
+    std::string piecesFilePath = "";
+    int previewGrid = 6;
+    std::string randomizerType = "simple";
+    int randBagSize = 0;
+    std::vector<RGB> pieceColors;
+};
+
+/**
+ * @brief Game configuration structure
+ * 
+ * Contains all game mechanics settings
+ */
+struct GameConfig {
+    int tickMsStart = 400;
+    int tickMsMin = 80;
+    int speedAcceleration = 50;
+    int levelStep = 10;
+    float aspectCorrectionFactor = 0.75f;
+};
+
+/**
+ * @brief Centralized configuration manager
+ * 
+ * Manages all configuration categories and provides unified access
+ */
+class ConfigManager {
+private:
+    VisualConfig visual_;
+    AudioConfig audio_;
+    InputConfig input_;
+    PiecesConfig pieces_;
+    GameConfig game_;
+    
+    std::vector<std::string> configPaths_;
+    std::map<std::string, std::string> overrides_;
+    bool loaded_ = false;
+    
+public:
+    // Getters
+    const VisualConfig& getVisual() const { return visual_; }
+    const AudioConfig& getAudio() const { return audio_; }
+    const InputConfig& getInput() const { return input_; }
+    const PiecesConfig& getPieces() const { return pieces_; }
+    const GameConfig& getGame() const { return game_; }
+    
+    // Setters
+    VisualConfig& getVisual() { return visual_; }
+    AudioConfig& getAudio() { return audio_; }
+    InputConfig& getInput() { return input_; }
+    PiecesConfig& getPieces() { return pieces_; }
+    GameConfig& getGame() { return game_; }
+    
+    // Loading methods
+    bool loadFromFile(const std::string& path);
+    bool loadFromEnvironment();
+    bool loadFromCommandLine(int argc, char* argv[]);
+    bool loadAll();
+    
+    // Override system
+    void setOverride(const std::string& key, const std::string& value);
+    void clearOverrides();
+    
+    // Validation
+    bool validate() const;
+    
+    // Status
+    bool isLoaded() const { return loaded_; }
+    const std::vector<std::string>& getConfigPaths() const { return configPaths_; }
+};
+
+/**
+ * @brief Abstract configuration parser interface
+ * 
+ * Provides a unified interface for parsing different configuration categories
+ */
+class ConfigParser {
+public:
+    virtual ~ConfigParser() = default;
+    virtual bool parse(const std::string& key, const std::string& value) = 0;
+    virtual std::string getCategory() const = 0;
+    virtual bool validate() const = 0;
+};
+
+/**
+ * @brief Visual configuration parser
+ * 
+ * Handles parsing of all visual-related configuration options
+ */
+class VisualConfigParser : public ConfigParser {
+private:
+    VisualConfig& config_;
+    
+    // Helper functions
+    bool parseBool(const std::string& value) const;
+    int parseInt(const std::string& value) const;
+    float parseFloat(const std::string& value) const;
+    bool parseHexColor(const std::string& value, RGB& color) const;
+    
+public:
+    VisualConfigParser(VisualConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "visual"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Audio configuration parser
+ * 
+ * Handles parsing of all audio-related configuration options
+ */
+class AudioConfigParser : public ConfigParser {
+private:
+    AudioConfig& config_;
+    
+    bool parseBool(const std::string& value) const;
+    float parseFloat(const std::string& value) const;
+    
+public:
+    AudioConfigParser(AudioConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "audio"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Input configuration parser
+ * 
+ * Handles parsing of all input-related configuration options
+ */
+class InputConfigParser : public ConfigParser {
+private:
+    InputConfig& config_;
+    
+    bool parseBool(const std::string& value) const;
+    int parseInt(const std::string& value) const;
+    float parseFloat(const std::string& value) const;
+    
+public:
+    InputConfigParser(InputConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "input"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Pieces configuration parser
+ * 
+ * Handles parsing of all piece-related configuration options
+ */
+class PiecesConfigParser : public ConfigParser {
+private:
+    PiecesConfig& config_;
+    
+    int parseInt(const std::string& value) const;
+    bool parseHexColor(const std::string& value, RGB& color) const;
+    
+public:
+    PiecesConfigParser(PiecesConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "pieces"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Game configuration parser
+ * 
+ * Handles parsing of all game mechanics configuration options
+ */
+class GameConfigParser : public ConfigParser {
+private:
+    GameConfig& config_;
+    
+    int parseInt(const std::string& value) const;
+    float parseFloat(const std::string& value) const;
+    
+public:
+    GameConfigParser(GameConfig& config) : config_(config) {}
+    
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "game"; }
+    bool validate() const override;
+};
+
+/**
+ * @brief Configuration inheritance system
+ * 
+ * Manages configuration inheritance chain and priority-based loading
+ */
+class ConfigInheritance {
+private:
+    std::vector<std::string> inheritanceChain_;
+    std::map<std::string, std::string> overrides_;
+    
+public:
+    // Inheritance chain management
+    void addBaseConfig(const std::string& path);
+    void addOverrideConfig(const std::string& path);
+    void clearChain();
+    
+    // Override management
+    void addOverride(const std::string& key, const std::string& value);
+    void clearOverrides();
+    
+    // Loading
+    bool loadInheritedConfigs(ConfigManager& manager);
+    
+    // Getters
+    const std::vector<std::string>& getInheritanceChain() const { return inheritanceChain_; }
+    const std::map<std::string, std::string>& getOverrides() const { return overrides_; }
+};
+
+/**
+ * @brief Configuration validator
+ * 
+ * Validates configuration values and provides error reporting
+ */
+class ConfigValidator {
+public:
+    struct ValidationError {
+        std::string category;
+        std::string key;
+        std::string value;
+        std::string message;
+    };
+    
+    static std::vector<ValidationError> validate(const ConfigManager& config);
+    static bool isValid(const ConfigManager& config);
+    static void printErrors(const std::vector<ValidationError>& errors);
+};
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -153,11 +525,6 @@ enum class RandType {
 };
 static RandType RAND_TYPE = RandType::SIMPLE;
 static int RAND_BAG_SIZE  = 0;             // 0 => tamanho do set
-
-/**
- * @brief RGB color structure
- */
-struct RGB { Uint8 r,g,b; };
 
 /**
  * @brief Theme configuration structure
@@ -229,7 +596,7 @@ static int SPEED_ACCELERATION = 50;
 /** @brief Aspect ratio correction factor for LED screen distortion */
 static float ASPECT_CORRECTION_FACTOR = 0.75f;
 /** @brief Lines required to advance to next level */
-static const int LEVEL_STEP    = 10;
+static int LEVEL_STEP    = 10;
 
 /**
  * @brief Game board cell structure
@@ -1384,6 +1751,599 @@ struct AudioSystem {
     }
 };
 
+// ===========================
+//   IMPLEMENTAÇÕES DO SISTEMA DE CONFIGURAÇÃO
+// ===========================
+
+// Implementação do VisualConfigParser
+bool VisualConfigParser::parseBool(const std::string& value) const {
+    std::string v = value;
+    for (char& c : v) c = (char)std::tolower((unsigned char)c);
+    return (v == "1" || v == "true" || v == "on" || v == "yes");
+}
+
+int VisualConfigParser::parseInt(const std::string& value) const {
+    return std::atoi(value.c_str());
+}
+
+float VisualConfigParser::parseFloat(const std::string& value) const {
+    return (float)std::atof(value.c_str());
+}
+
+bool VisualConfigParser::parseHexColor(const std::string& value, RGB& color) const {
+    std::string hex = value;
+    if (hex[0] == '#') hex = hex.substr(1);
+    if (hex.length() != 6) {
+        DebugLogger::debug("parseHexColor failed: invalid length for " + value + " (length=" + std::to_string(hex.length()) + ")");
+        return false;
+    }
+    
+    try {
+        color.r = (Uint8)std::stoi(hex.substr(0, 2), nullptr, 16);
+        color.g = (Uint8)std::stoi(hex.substr(2, 2), nullptr, 16);
+        color.b = (Uint8)std::stoi(hex.substr(4, 2), nullptr, 16);
+        DebugLogger::debug("parseHexColor success: " + value + " -> R=" + std::to_string(color.r) + " G=" + std::to_string(color.g) + " B=" + std::to_string(color.b));
+        return true;
+    } catch (...) {
+        DebugLogger::debug("parseHexColor failed: exception parsing " + value);
+        return false;
+    }
+}
+
+bool VisualConfigParser::parse(const std::string& key, const std::string& value) {
+    DebugLogger::debug("VisualConfigParser::parse called with key=" + key + " value=" + value);
+    
+    // Colors
+    if (key == "BG") return parseHexColor(value, config_.colors.background);
+    if (key == "BOARD_EMPTY") return parseHexColor(value, config_.colors.boardEmpty);
+    if (key == "PANEL_FILL") return parseHexColor(value, config_.colors.panelFill);
+    if (key == "PANEL_OUTLINE") return parseHexColor(value, config_.colors.panelOutline);
+    if (key == "PANEL_OUTLINE_A") { config_.colors.panelOutlineAlpha = parseInt(value); return true; }
+    
+    // Banner
+    if (key == "BANNER_BG") return parseHexColor(value, config_.colors.bannerBg);
+    if (key == "BANNER_OUTLINE") return parseHexColor(value, config_.colors.bannerOutline);
+    if (key == "BANNER_OUTLINE_A") { config_.colors.bannerOutlineAlpha = parseInt(value); return true; }
+    if (key == "BANNER_TEXT") return parseHexColor(value, config_.colors.bannerText);
+    
+    // HUD
+    if (key == "HUD_LABEL") return parseHexColor(value, config_.colors.hudLabel);
+    if (key == "HUD_SCORE") return parseHexColor(value, config_.colors.hudScore);
+    if (key == "HUD_LINES") return parseHexColor(value, config_.colors.hudLines);
+    if (key == "HUD_LEVEL") return parseHexColor(value, config_.colors.hudLevel);
+    
+    // NEXT
+    if (key == "NEXT_FILL") return parseHexColor(value, config_.colors.nextFill);
+    if (key == "NEXT_OUTLINE") return parseHexColor(value, config_.colors.nextOutline);
+    if (key == "NEXT_OUTLINE_A") { config_.colors.nextOutlineAlpha = parseInt(value); return true; }
+    if (key == "NEXT_LABEL") return parseHexColor(value, config_.colors.nextLabel);
+    if (key == "NEXT_GRID_DARK") return parseHexColor(value, config_.colors.nextGridDark);
+    if (key == "NEXT_GRID_LIGHT") return parseHexColor(value, config_.colors.nextGridLight);
+    if (key == "NEXT_GRID_USE_RGB") { config_.colors.nextGridUseRgb = parseBool(value); return true; }
+    
+    // Overlay
+    if (key == "OVERLAY_FILL") return parseHexColor(value, config_.colors.overlayFill);
+    if (key == "OVERLAY_FILL_A") { config_.colors.overlayFillAlpha = parseInt(value); return true; }
+    if (key == "OVERLAY_OUTLINE") return parseHexColor(value, config_.colors.overlayOutline);
+    if (key == "OVERLAY_OUTLINE_A") { config_.colors.overlayOutlineAlpha = parseInt(value); return true; }
+    if (key == "OVERLAY_TOP") return parseHexColor(value, config_.colors.overlayTop);
+    if (key == "OVERLAY_SUB") return parseHexColor(value, config_.colors.overlaySub);
+    
+    // Effects
+    if (key == "ENABLE_BANNER_SWEEP") { config_.effects.bannerSweep = parseBool(value); return true; }
+    if (key == "ENABLE_GLOBAL_SWEEP") { config_.effects.globalSweep = parseBool(value); return true; }
+    if (key == "SWEEP_SPEED_PXPS") { config_.effects.sweepSpeedPxps = parseFloat(value); return true; }
+    if (key == "SWEEP_BAND_H_S") { config_.effects.sweepBandHS = parseInt(value); return true; }
+    if (key == "SWEEP_ALPHA_MAX") { config_.effects.sweepAlphaMax = parseInt(value); return true; }
+    if (key == "SWEEP_SOFTNESS") { config_.effects.sweepSoftness = parseFloat(value); return true; }
+    if (key == "SWEEP_G_SPEED_PXPS") { config_.effects.sweepGSpeedPxps = parseFloat(value); return true; }
+    if (key == "SWEEP_G_BAND_H_PX") { config_.effects.sweepGBandHPx = parseInt(value); return true; }
+    if (key == "SWEEP_G_ALPHA_MAX") { config_.effects.sweepGAlphaMax = parseInt(value); return true; }
+    if (key == "SWEEP_G_SOFTNESS") { config_.effects.sweepGSoftness = parseFloat(value); return true; }
+    if (key == "SCANLINE_ALPHA") { config_.effects.scanlineAlpha = parseInt(value); return true; }
+    
+    // Layout
+    if (key == "ROUNDED_PANELS") { config_.layout.roundedPanels = parseInt(value); return true; }
+    if (key == "HUD_FIXED_SCALE") { config_.layout.hudFixedScale = parseInt(value); return true; }
+    if (key == "GAP1_SCALE") { config_.layout.gap1Scale = parseInt(value); return true; }
+    if (key == "GAP2_SCALE") { config_.layout.gap2Scale = parseInt(value); return true; }
+    
+    // Text
+    if (key == "TITLE_TEXT") { config_.titleText = value; return true; }
+    
+    return false;
+}
+
+bool VisualConfigParser::validate() const {
+    // Validate ranges
+    if (config_.effects.sweepAlphaMax < 0 || config_.effects.sweepAlphaMax > 255) return false;
+    if (config_.effects.sweepGAlphaMax < 0 || config_.effects.sweepGAlphaMax > 255) return false;
+    if (config_.effects.scanlineAlpha < 0 || config_.effects.scanlineAlpha > 255) return false;
+    if (config_.effects.sweepSoftness < 0.0f || config_.effects.sweepSoftness > 1.0f) return false;
+    if (config_.effects.sweepGSoftness < 0.0f || config_.effects.sweepGSoftness > 1.0f) return false;
+    if (config_.layout.roundedPanels < 0) return false;
+    if (config_.layout.hudFixedScale < 1) return false;
+    if (config_.layout.gap1Scale < 0) return false;
+    if (config_.layout.gap2Scale < 0) return false;
+    
+    return true;
+}
+
+// Implementação do AudioConfigParser
+bool AudioConfigParser::parseBool(const std::string& value) const {
+    std::string v = value;
+    for (char& c : v) c = (char)std::tolower((unsigned char)c);
+    return (v == "1" || v == "true" || v == "on" || v == "yes");
+}
+
+float AudioConfigParser::parseFloat(const std::string& value) const {
+    float v = (float)std::atof(value.c_str());
+    if (v < 0.0f) v = 0.0f;
+    if (v > 1.0f) v = 1.0f;
+    return v;
+}
+
+bool AudioConfigParser::parse(const std::string& key, const std::string& value) {
+    if (key == "AUDIO_MASTER_VOLUME") { config_.masterVolume = parseFloat(value); return true; }
+    if (key == "AUDIO_SFX_VOLUME") { config_.sfxVolume = parseFloat(value); return true; }
+    if (key == "AUDIO_AMBIENT_VOLUME") { config_.ambientVolume = parseFloat(value); return true; }
+    if (key == "ENABLE_MOVEMENT_SOUNDS") { config_.enableMovementSounds = parseBool(value); return true; }
+    if (key == "ENABLE_AMBIENT_SOUNDS") { config_.enableAmbientSounds = parseBool(value); return true; }
+    if (key == "ENABLE_COMBO_SOUNDS") { config_.enableComboSounds = parseBool(value); return true; }
+    if (key == "ENABLE_LEVEL_UP_SOUNDS") { config_.enableLevelUpSounds = parseBool(value); return true; }
+    
+    return false;
+}
+
+bool AudioConfigParser::validate() const {
+    return (config_.masterVolume >= 0.0f && config_.masterVolume <= 1.0f) &&
+           (config_.sfxVolume >= 0.0f && config_.sfxVolume <= 1.0f) &&
+           (config_.ambientVolume >= 0.0f && config_.ambientVolume <= 1.0f);
+}
+
+// Implementação do InputConfigParser
+bool InputConfigParser::parseBool(const std::string& value) const {
+    std::string v = value;
+    for (char& c : v) c = (char)std::tolower((unsigned char)c);
+    return (v == "1" || v == "true" || v == "on" || v == "yes");
+}
+
+int InputConfigParser::parseInt(const std::string& value) const {
+    return std::atoi(value.c_str());
+}
+
+float InputConfigParser::parseFloat(const std::string& value) const {
+    return (float)std::atof(value.c_str());
+}
+
+bool InputConfigParser::parse(const std::string& key, const std::string& value) {
+    // Button mapping
+    if (key == "JOYSTICK_BUTTON_LEFT") { config_.buttonLeft = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_RIGHT") { config_.buttonRight = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_DOWN") { config_.buttonDown = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_UP") { config_.buttonUp = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_ROTATE_CCW") { config_.buttonRotateCCW = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_ROTATE_CW") { config_.buttonRotateCW = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_SOFT_DROP") { config_.buttonSoftDrop = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_HARD_DROP") { config_.buttonHardDrop = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_PAUSE") { config_.buttonPause = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_START") { config_.buttonStart = parseInt(value); return true; }
+    if (key == "JOYSTICK_BUTTON_QUIT") { config_.buttonQuit = parseInt(value); return true; }
+    
+    // Analog settings
+    if (key == "JOYSTICK_ANALOG_DEADZONE") { config_.analogDeadzone = parseFloat(value); return true; }
+    if (key == "JOYSTICK_ANALOG_SENSITIVITY") { config_.analogSensitivity = parseFloat(value); return true; }
+    if (key == "JOYSTICK_INVERT_Y_AXIS") { config_.invertYAxis = parseBool(value); return true; }
+    
+    // Timing
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY") { config_.moveRepeatDelay = parseInt(value); return true; }
+    if (key == "JOYSTICK_SOFT_DROP_REPEAT_DELAY") { config_.softDropRepeatDelay = parseInt(value); return true; }
+    
+    return false;
+}
+
+bool InputConfigParser::validate() const {
+    return (config_.analogDeadzone >= 0.0f && config_.analogDeadzone <= 1.0f) &&
+           (config_.analogSensitivity >= 0.0f && config_.analogSensitivity <= 2.0f) &&
+           (config_.buttonLeft >= 0 && config_.buttonLeft < 32) &&
+           (config_.buttonRight >= 0 && config_.buttonRight < 32) &&
+           (config_.buttonDown >= 0 && config_.buttonDown < 32) &&
+           (config_.buttonUp >= 0 && config_.buttonUp < 32) &&
+           (config_.buttonRotateCCW >= 0 && config_.buttonRotateCCW < 32) &&
+           (config_.buttonRotateCW >= 0 && config_.buttonRotateCW < 32) &&
+           (config_.buttonSoftDrop >= 0 && config_.buttonSoftDrop < 32) &&
+           (config_.buttonHardDrop >= 0 && config_.buttonHardDrop < 32) &&
+           (config_.buttonPause >= 0 && config_.buttonPause < 32) &&
+           (config_.buttonStart >= 0 && config_.buttonStart < 32) &&
+           (config_.buttonQuit >= 0 && config_.buttonQuit < 32);
+}
+
+// Implementação do PiecesConfigParser
+int PiecesConfigParser::parseInt(const std::string& value) const {
+    return std::atoi(value.c_str());
+}
+
+bool PiecesConfigParser::parseHexColor(const std::string& value, RGB& color) const {
+    std::string hex = value;
+    if (hex[0] == '#') hex = hex.substr(1);
+    if (hex.length() != 6) return false;
+    
+    try {
+        color.r = (Uint8)std::stoi(hex.substr(0, 2), nullptr, 16);
+        color.g = (Uint8)std::stoi(hex.substr(2, 2), nullptr, 16);
+        color.b = (Uint8)std::stoi(hex.substr(4, 2), nullptr, 16);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool PiecesConfigParser::parse(const std::string& key, const std::string& value) {
+    if (key == "PIECES_FILE") { config_.piecesFilePath = value; return true; }
+    if (key == "PREVIEW_GRID") { config_.previewGrid = parseInt(value); return true; }
+    if (key == "RAND_TYPE") { config_.randomizerType = value; return true; }
+    if (key == "RAND_BAG_SIZE") { config_.randBagSize = parseInt(value); return true; }
+    
+    // Piece colors (PIECE0, PIECE1, etc.)
+    if (key.rfind("PIECE", 0) == 0) {
+        std::string numStr = key.substr(5);
+        int pieceIndex = -1;
+        try {
+            pieceIndex = std::stoi(numStr);
+        } catch (...) {
+            return false;
+        }
+        
+        RGB color;
+        if (parseHexColor(value, color)) {
+            if (pieceIndex >= (int)config_.pieceColors.size()) {
+                config_.pieceColors.resize(pieceIndex + 1, {200, 200, 200});
+            }
+            config_.pieceColors[pieceIndex] = color;
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool PiecesConfigParser::validate() const {
+    return (config_.previewGrid >= 4 && config_.previewGrid <= 12) &&
+           (config_.randBagSize >= 0 && config_.randBagSize <= 20) &&
+           (config_.randomizerType == "simple" || config_.randomizerType == "bag");
+}
+
+// Implementação do GameConfigParser
+int GameConfigParser::parseInt(const std::string& value) const {
+    return std::atoi(value.c_str());
+}
+
+float GameConfigParser::parseFloat(const std::string& value) const {
+    return (float)std::atof(value.c_str());
+}
+
+bool GameConfigParser::parse(const std::string& key, const std::string& value) {
+    if (key == "TICK_MS_START") { config_.tickMsStart = parseInt(value); return true; }
+    if (key == "TICK_MS_MIN") { config_.tickMsMin = parseInt(value); return true; }
+    if (key == "SPEED_ACCELERATION") { config_.speedAcceleration = parseInt(value); return true; }
+    if (key == "LEVEL_STEP") { config_.levelStep = parseInt(value); return true; }
+    if (key == "ASPECT_CORRECTION_FACTOR") { config_.aspectCorrectionFactor = parseFloat(value); return true; }
+    
+    return false;
+}
+
+bool GameConfigParser::validate() const {
+    return (config_.tickMsStart > 0) &&
+           (config_.tickMsMin > 0) &&
+           (config_.speedAcceleration > 0) &&
+           (config_.levelStep > 0) &&
+           (config_.aspectCorrectionFactor > 0.0f && config_.aspectCorrectionFactor <= 2.0f);
+}
+
+// Implementação do ConfigManager
+bool ConfigManager::loadFromFile(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.good()) {
+        DebugLogger::error("Failed to open config file: " + path);
+        return false;
+    }
+    
+    configPaths_.push_back(path);
+    
+    // Create parsers
+    VisualConfigParser visualParser(visual_);
+    AudioConfigParser audioParser(audio_);
+    InputConfigParser inputParser(input_);
+    PiecesConfigParser piecesParser(pieces_);
+    GameConfigParser gameParser(game_);
+    
+    std::vector<ConfigParser*> parsers = {&visualParser, &audioParser, &inputParser, &piecesParser, &gameParser};
+    
+    std::string line;
+    int lineNum = 0;
+    int processedLines = 0;
+    int skippedLines = 0;
+    
+    while (std::getline(file, line)) {
+        lineNum++;
+        
+        DebugLogger::debug("Reading line " + std::to_string(lineNum) + ": '" + line + "'");
+        
+        // Parse line (remove comments) - but only if # is at the beginning of the line or after whitespace
+        size_t commentPos = line.find('#');
+        if (commentPos != std::string::npos) {
+            // Check if # is at the beginning or after only whitespace
+            std::string beforeHash = line.substr(0, commentPos);
+            beforeHash.erase(0, beforeHash.find_first_not_of(" \t"));
+            if (beforeHash.empty()) {
+                line = line.substr(0, commentPos);
+            }
+        }
+        
+        // Also remove ; comments (inline comments)
+        size_t semiPos = line.find(';');
+        if (semiPos != std::string::npos) {
+            line = line.substr(0, semiPos);
+        }
+        
+        // Trim whitespace
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+        
+        if (line.empty()) {
+            skippedLines++;
+            continue;
+        }
+        
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) {
+            skippedLines++;
+            continue;
+        }
+        
+        std::string key = line.substr(0, eq);
+        std::string value = line.substr(eq + 1);
+        
+        DebugLogger::debug("Raw parsing - key='" + key + "' value='" + value + "'");
+        
+        // Trim key and value
+        trim(key);
+        trim(value);
+        
+        DebugLogger::debug("After trim - key='" + key + "' value='" + value + "'");
+        
+        if (key.empty()) {
+            skippedLines++;
+            continue;
+        }
+        
+        // Convert key to uppercase
+        for (char& c : key) c = (char)std::toupper((unsigned char)c);
+        
+        // Try each parser
+        bool parsed = false;
+        for (auto* parser : parsers) {
+            if (parser->parse(key, value)) {
+                parsed = true;
+                processedLines++;
+                DebugLogger::debug("Parsed key: " + key + " = " + value + " by " + parser->getCategory());
+                break;
+            }
+        }
+        
+        if (!parsed) {
+            skippedLines++;
+            DebugLogger::warning("Unknown config key: " + key);
+        }
+    }
+    
+    DebugLogger::info("Config loaded from: " + path + " (processed: " + std::to_string(processedLines) + ", skipped: " + std::to_string(skippedLines) + ")");
+    loaded_ = true;
+    return true;
+}
+
+bool ConfigManager::loadFromEnvironment() {
+    if (const char* env = std::getenv("DROPBLOCKS_CFG")) {
+        return loadFromFile(env);
+    }
+    return false;
+}
+
+bool ConfigManager::loadFromCommandLine(int argc, char* argv[]) {
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg.length() > 4 && arg.substr(arg.length() - 4) == ".cfg") {
+            return loadFromFile(arg);
+        }
+    }
+    return false;
+}
+
+bool ConfigManager::loadAll() {
+    // Try environment variable first
+    if (loadFromEnvironment()) return true;
+    
+    // Try command line
+    if (loadFromCommandLine(0, nullptr)) return true;
+    
+    // Try default files
+    if (loadFromFile("default.cfg")) return true;
+    if (loadFromFile("dropblocks.cfg")) return true;
+    
+    // Try home directory
+    if (const char* home = std::getenv("HOME")) {
+        std::string homeConfig = std::string(home) + "/.config/default.cfg";
+        if (loadFromFile(homeConfig)) return true;
+        
+        homeConfig = std::string(home) + "/.config/dropblocks.cfg";
+        if (loadFromFile(homeConfig)) return true;
+    }
+    
+    DebugLogger::info("No config files found, using defaults");
+    loaded_ = true;
+    return true;
+}
+
+void ConfigManager::setOverride(const std::string& key, const std::string& value) {
+    overrides_[key] = value;
+}
+
+void ConfigManager::clearOverrides() {
+    overrides_.clear();
+}
+
+bool ConfigManager::validate() const {
+    VisualConfigParser visualParser(const_cast<VisualConfig&>(visual_));
+    AudioConfigParser audioParser(const_cast<AudioConfig&>(audio_));
+    InputConfigParser inputParser(const_cast<InputConfig&>(input_));
+    PiecesConfigParser piecesParser(const_cast<PiecesConfig&>(pieces_));
+    GameConfigParser gameParser(const_cast<GameConfig&>(game_));
+    
+    return visualParser.validate() && audioParser.validate() && 
+           inputParser.validate() && piecesParser.validate() && 
+           gameParser.validate();
+}
+
+// ===========================
+//   FUNÇÕES DE APLICAÇÃO DE CONFIGURAÇÃO
+// ===========================
+
+/**
+ * @brief Apply audio configuration to AudioSystem
+ */
+static void applyConfigToAudio(AudioSystem& audio, const AudioConfig& config) {
+    audio.masterVolume = config.masterVolume;
+    audio.sfxVolume = config.sfxVolume;
+    audio.ambientVolume = config.ambientVolume;
+    audio.enableMovementSounds = config.enableMovementSounds;
+    audio.enableAmbientSounds = config.enableAmbientSounds;
+    audio.enableComboSounds = config.enableComboSounds;
+    audio.enableLevelUpSounds = config.enableLevelUpSounds;
+}
+
+/**
+ * @brief Apply visual configuration to global theme
+ */
+static void applyConfigToTheme(const VisualConfig& config) {
+    DebugLogger::debug("applyConfigToTheme - Applying visual configuration to THEME");
+    
+    // Apply colors
+    THEME.bg_r = config.colors.background.r;
+    THEME.bg_g = config.colors.background.g;
+    THEME.bg_b = config.colors.background.b;
+    
+    DebugLogger::debug("Background color: R=" + std::to_string(THEME.bg_r) + " G=" + std::to_string(THEME.bg_g) + " B=" + std::to_string(THEME.bg_b));
+    
+    THEME.board_empty_r = config.colors.boardEmpty.r;
+    THEME.board_empty_g = config.colors.boardEmpty.g;
+    THEME.board_empty_b = config.colors.boardEmpty.b;
+    
+    THEME.panel_fill_r = config.colors.panelFill.r;
+    THEME.panel_fill_g = config.colors.panelFill.g;
+    THEME.panel_fill_b = config.colors.panelFill.b;
+    
+    THEME.panel_outline_r = config.colors.panelOutline.r;
+    THEME.panel_outline_g = config.colors.panelOutline.g;
+    THEME.panel_outline_b = config.colors.panelOutline.b;
+    THEME.panel_outline_a = config.colors.panelOutlineAlpha;
+    
+    // Banner
+    THEME.banner_bg_r = config.colors.bannerBg.r;
+    THEME.banner_bg_g = config.colors.bannerBg.g;
+    THEME.banner_bg_b = config.colors.bannerBg.b;
+    
+    THEME.banner_outline_r = config.colors.bannerOutline.r;
+    THEME.banner_outline_g = config.colors.bannerOutline.g;
+    THEME.banner_outline_b = config.colors.bannerOutline.b;
+    THEME.banner_outline_a = config.colors.bannerOutlineAlpha;
+    
+    THEME.banner_text_r = config.colors.bannerText.r;
+    THEME.banner_text_g = config.colors.bannerText.g;
+    THEME.banner_text_b = config.colors.bannerText.b;
+    
+    // HUD
+    THEME.hud_label_r = config.colors.hudLabel.r;
+    THEME.hud_label_g = config.colors.hudLabel.g;
+    THEME.hud_label_b = config.colors.hudLabel.b;
+    
+    THEME.hud_score_r = config.colors.hudScore.r;
+    THEME.hud_score_g = config.colors.hudScore.g;
+    THEME.hud_score_b = config.colors.hudScore.b;
+    
+    THEME.hud_lines_r = config.colors.hudLines.r;
+    THEME.hud_lines_g = config.colors.hudLines.g;
+    THEME.hud_lines_b = config.colors.hudLines.b;
+    
+    THEME.hud_level_r = config.colors.hudLevel.r;
+    THEME.hud_level_g = config.colors.hudLevel.g;
+    THEME.hud_level_b = config.colors.hudLevel.b;
+    
+    // NEXT
+    THEME.next_fill_r = config.colors.nextFill.r;
+    THEME.next_fill_g = config.colors.nextFill.g;
+    THEME.next_fill_b = config.colors.nextFill.b;
+    
+    THEME.next_outline_r = config.colors.nextOutline.r;
+    THEME.next_outline_g = config.colors.nextOutline.g;
+    THEME.next_outline_b = config.colors.nextOutline.b;
+    THEME.next_outline_a = config.colors.nextOutlineAlpha;
+    
+    THEME.next_label_r = config.colors.nextLabel.r;
+    THEME.next_label_g = config.colors.nextLabel.g;
+    THEME.next_label_b = config.colors.nextLabel.b;
+    
+    THEME.next_grid_dark_r = config.colors.nextGridDark.r;
+    THEME.next_grid_dark_g = config.colors.nextGridDark.g;
+    THEME.next_grid_dark_b = config.colors.nextGridDark.b;
+    
+    THEME.next_grid_light_r = config.colors.nextGridLight.r;
+    THEME.next_grid_light_g = config.colors.nextGridLight.g;
+    THEME.next_grid_light_b = config.colors.nextGridLight.b;
+    THEME.next_grid_use_rgb = config.colors.nextGridUseRgb;
+    
+    // Overlay
+    THEME.overlay_fill_r = config.colors.overlayFill.r;
+    THEME.overlay_fill_g = config.colors.overlayFill.g;
+    THEME.overlay_fill_b = config.colors.overlayFill.b;
+    THEME.overlay_fill_a = config.colors.overlayFillAlpha;
+    
+    THEME.overlay_outline_r = config.colors.overlayOutline.r;
+    THEME.overlay_outline_g = config.colors.overlayOutline.g;
+    THEME.overlay_outline_b = config.colors.overlayOutline.b;
+    THEME.overlay_outline_a = config.colors.overlayOutlineAlpha;
+    
+    THEME.overlay_top_r = config.colors.overlayTop.r;
+    THEME.overlay_top_g = config.colors.overlayTop.g;
+    THEME.overlay_top_b = config.colors.overlayTop.b;
+    
+    THEME.overlay_sub_r = config.colors.overlaySub.r;
+    THEME.overlay_sub_g = config.colors.overlaySub.g;
+    THEME.overlay_sub_b = config.colors.overlaySub.b;
+    
+    // Apply effects
+    ENABLE_BANNER_SWEEP = config.effects.bannerSweep;
+    ENABLE_GLOBAL_SWEEP = config.effects.globalSweep;
+    SWEEP_SPEED_PXPS = config.effects.sweepSpeedPxps;
+    SWEEP_BAND_H_S = config.effects.sweepBandHS;
+    SWEEP_ALPHA_MAX = config.effects.sweepAlphaMax;
+    SWEEP_SOFTNESS = config.effects.sweepSoftness;
+    SWEEP_G_SPEED_PXPS = config.effects.sweepGSpeedPxps;
+    SWEEP_G_BAND_H_PX = config.effects.sweepGBandHPx;
+    SWEEP_G_ALPHA_MAX = config.effects.sweepGAlphaMax;
+    SWEEP_G_SOFTNESS = config.effects.sweepGSoftness;
+    SCANLINE_ALPHA = config.effects.scanlineAlpha;
+    
+    // Apply layout
+    ROUNDED_PANELS = config.layout.roundedPanels;
+    HUD_FIXED_SCALE = config.layout.hudFixedScale;
+    GAP1_SCALE = config.layout.gap1Scale;
+    GAP2_SCALE = config.layout.gap2Scale;
+    
+    // Apply text
+    TITLE_TEXT = config.titleText;
+}
+
+
 // Implementação da função processAudioConfigs
 static bool processAudioConfigs(const std::string& key, const std::string& val, int& processedLines, AudioSystem& audio) {
     auto setb = [&](const char* K, bool& ref) {
@@ -1591,223 +2551,6 @@ private:
     }
 };
 
-/**
- * @brief Joystick input handler
- * 
- * Handles joystick/controller input with analog and digital support
- */
-class JoystickInput : public InputHandler {
-private:
-    SDL_Joystick* joystick = nullptr;
-    SDL_GameController* controller = nullptr;
-    int joystickId = -1;
-    bool isConnectedFlag = false;
-    
-    // Button mapping
-    int buttonLeft = 13;
-    int buttonRight = 11;
-    int buttonDown = 14;
-    int buttonUp = 12;
-    int buttonRotateCCW = 0;
-    int buttonRotateCW = 1;
-    int buttonSoftDrop = 2;
-    int buttonHardDrop = 3;
-    int buttonPause = 6;
-    int buttonStart = 7;
-    int buttonQuit = 8;
-    
-    // Analog settings
-    float analogDeadzone = 0.3f;
-    float analogSensitivity = 1.0f;
-    bool invertYAxis = false;
-    
-    // Button states
-    bool buttonStates[32] = {false};
-    bool lastButtonStates[32] = {false};
-    
-    // Analog states
-    float leftStickX = 0.0f;
-    float leftStickY = 0.0f;
-    float rightStickX = 0.0f;
-    float rightStickY = 0.0f;
-    
-    // Timers
-    Uint32 lastMoveTime = 0;
-    Uint32 moveRepeatDelay = 200;
-    Uint32 lastSoftDropTime = 0;
-    Uint32 softDropRepeatDelay = 100;
-    
-public:
-    bool shouldMoveLeft() override {
-        return isButtonPressed(buttonLeft) || 
-               (leftStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT));
-    }
-    
-    bool shouldMoveRight() override {
-        return isButtonPressed(buttonRight) || 
-               (leftStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT));
-    }
-    
-    bool shouldSoftDrop() override {
-        bool dpadDown = (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN));
-        bool analogDown = (leftStickY > analogDeadzone && SDL_GetTicks() - lastSoftDropTime > softDropRepeatDelay);
-        bool buttonPressed = isButtonPressed(buttonSoftDrop);
-        
-        if (dpadDown || analogDown || buttonPressed) {
-            lastSoftDropTime = SDL_GetTicks();
-            return true;
-        }
-        return false;
-    }
-    
-    bool shouldHardDrop() override {
-        return isButtonPressed(buttonHardDrop);
-    }
-    
-    bool shouldRotateCCW() override {
-        return isButtonPressed(buttonRotateCCW) || 
-               (rightStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)) ||
-               (leftStickY < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
-    }
-    
-    bool shouldRotateCW() override {
-        return isButtonPressed(buttonRotateCW) || 
-               (rightStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)) ||
-               (leftStickY < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
-    }
-    
-    bool shouldPause() override {
-        return isButtonPressed(buttonPause);
-    }
-    
-    bool shouldRestart() override {
-        return isButtonPressed(buttonStart);
-    }
-    
-    bool shouldQuit() override {
-        return isButtonPressed(buttonQuit);
-    }
-    
-    bool shouldScreenshot() override {
-        return false; // Screenshot not available on joystick
-    }
-    
-    void update() override {
-        if (!isConnectedFlag) return;
-        
-        // Update button states
-        for (int i = 0; i < 32; i++) {
-            lastButtonStates[i] = buttonStates[i];
-            if (controller) {
-                buttonStates[i] = SDL_GameControllerGetButton(controller, (SDL_GameControllerButton)i);
-            } else if (joystick) {
-                buttonStates[i] = SDL_JoystickGetButton(joystick, i);
-            }
-        }
-        
-        // Update analog
-        if (controller) {
-            leftStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX) / 32767.0f;
-            leftStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY) / 32767.0f;
-            if (invertYAxis) leftStickY = -leftStickY;
-            rightStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f;
-            rightStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
-            if (invertYAxis) rightStickY = -rightStickY;
-        } else if (joystick) {
-            leftStickX = SDL_JoystickGetAxis(joystick, 0) / 32767.0f;
-            leftStickY = SDL_JoystickGetAxis(joystick, 1) / 32767.0f;
-            if (invertYAxis) leftStickY = -leftStickY;
-            if (SDL_JoystickNumAxes(joystick) > 2) {
-                rightStickX = SDL_JoystickGetAxis(joystick, 2) / 32767.0f;
-                rightStickY = SDL_JoystickGetAxis(joystick, 3) / 32767.0f;
-                if (invertYAxis) rightStickY = -rightStickY;
-            }
-        }
-        
-        // Apply deadzone
-        if (std::abs(leftStickX) < analogDeadzone) leftStickX = 0.0f;
-        if (std::abs(leftStickY) < analogDeadzone) leftStickY = 0.0f;
-        if (std::abs(rightStickX) < analogDeadzone) rightStickX = 0.0f;
-        if (std::abs(rightStickY) < analogDeadzone) rightStickY = 0.0f;
-    }
-    
-    bool isConnected() override {
-        return isConnectedFlag;
-    }
-    
-    void resetTimers() override {
-        lastMoveTime = SDL_GetTicks();
-    }
-    
-    bool initialize() {
-        int numJoysticks = SDL_NumJoysticks();
-        if (numJoysticks > 0) {
-            if (SDL_IsGameController(0)) {
-                controller = SDL_GameControllerOpen(0);
-                if (controller) {
-                    joystick = SDL_GameControllerGetJoystick(controller);
-                    joystickId = 0;
-                    isConnectedFlag = true;
-                    printf("Game controller connected: %s\n", SDL_GameControllerName(controller));
-                    return true;
-                }
-            }
-            
-            joystick = SDL_JoystickOpen(0);
-            if (joystick) {
-                joystickId = 0;
-                isConnectedFlag = true;
-                printf("Joystick connected: %s\n", SDL_JoystickName(joystick));
-                return true;
-            }
-        }
-        
-        printf("No joystick/controller found\n");
-        return false;
-    }
-    
-    void cleanup() {
-        if (controller) {
-            SDL_GameControllerClose(controller);
-            controller = nullptr;
-        }
-        if (joystick) {
-            SDL_JoystickClose(joystick);
-            joystick = nullptr;
-        }
-        isConnectedFlag = false;
-    }
-    
-    // Configuration methods
-    void setButtonMapping(int left, int right, int down, int up, int rotCCW, int rotCW, 
-                         int softDrop, int hardDrop, int pause, int start, int quit) {
-        buttonLeft = left; buttonRight = right; buttonDown = down; buttonUp = up;
-        buttonRotateCCW = rotCCW; buttonRotateCW = rotCW;
-        buttonSoftDrop = softDrop; buttonHardDrop = hardDrop;
-        buttonPause = pause; buttonStart = start; buttonQuit = quit;
-    }
-    
-    void setAnalogSettings(float deadzone, float sensitivity, bool invertY) {
-        analogDeadzone = deadzone;
-        analogSensitivity = sensitivity;
-        invertYAxis = invertY;
-    }
-    
-    void setTiming(Uint32 moveDelay, Uint32 softDropDelay) {
-        moveRepeatDelay = moveDelay;
-        softDropRepeatDelay = softDropDelay;
-    }
-    
-private:
-    bool isButtonPressed(int button) {
-        if (button < 0 || button >= 32) return false;
-        return buttonStates[button] && !lastButtonStates[button];
-    }
-};
 
 /**
  * @brief Input manager for handling multiple input sources
@@ -1837,8 +2580,14 @@ public:
         }
     }
     
+    // Access to handlers for configuration
+    std::vector<std::unique_ptr<InputHandler>>& getHandlers() {
+        return handlers;
+    }
+    
     // Unified input methods - use primary handler or first available
     InputHandler* getActiveHandler() {
+        // Se o handler primário está conectado, use ele
         if (primaryHandler && primaryHandler->isConnected()) {
             return primaryHandler;
         }
@@ -1852,54 +2601,119 @@ public:
         return nullptr;
     }
     
-    bool shouldMoveLeft() {
+    // Debug method to check which handler is active
+    void debugActiveHandler() {
+        DebugLogger::debug("InputManager: Total handlers: " + std::to_string(handlers.size()));
+        DebugLogger::debug("InputManager: Primary handler: " + std::string(primaryHandler ? "Set" : "Not set"));
+        
         auto handler = getActiveHandler();
-        return handler ? handler->shouldMoveLeft() : false;
+        if (handler) {
+            // Use typeid to avoid forward declaration issues
+            const char* typeName = typeid(*handler).name();
+            DebugLogger::debug("InputManager: Active handler type: " + std::string(typeName));
+        } else {
+            DebugLogger::debug("InputManager: No active handler found");
+        }
+    }
+    
+    bool shouldMoveLeft() {
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldMoveLeft()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldMoveRight() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldMoveRight() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldMoveRight()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldSoftDrop() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldSoftDrop() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldSoftDrop()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldHardDrop() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldHardDrop() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldHardDrop()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldRotateCCW() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldRotateCCW() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldRotateCCW()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldRotateCW() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldRotateCW() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldRotateCW()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldPause() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldPause() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldPause()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldRestart() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldRestart() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldRestart()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldQuit() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldQuit() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldQuit()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     bool shouldScreenshot() {
-        auto handler = getActiveHandler();
-        return handler ? handler->shouldScreenshot() : false;
+        // Verificar todos os handlers conectados
+        for (auto& handler : handlers) {
+            if (handler->isConnected() && handler->shouldScreenshot()) {
+                return true;
+            }
+        }
+        return false;
     }
     
     void resetTimers() {
@@ -1907,25 +2721,98 @@ public:
         if (handler) handler->resetTimers();
     }
     
-    void cleanup() {
-        for (auto& handler : handlers) {
-            if (auto* joystick = dynamic_cast<JoystickInput*>(handler.get())) {
-                joystick->cleanup();
-            }
-        }
-        handlers.clear();
-        primaryHandler = nullptr;
-    }
+    void cleanup(); // Declaração - implementação após definição de JoystickInput
 };
 
-// Estrutura para sistema de joystick
-struct JoystickSystem {
-    SDL_Joystick* joystick = nullptr;
-    SDL_GameController* controller = nullptr;
-    int joystickId = -1;
-    bool isConnected = false;
+// ===========================
+//   SISTEMA DE JOYSTICK MODULAR
+// ===========================
+
+/**
+ * @brief Joystick device management
+ * 
+ * Handles SDL joystick/controller detection and connection
+ */
+class JoystickDevice {
+private:
+    SDL_Joystick* joystick_ = nullptr;
+    SDL_GameController* controller_ = nullptr;
+    int joystickId_ = -1;
+    bool isConnected_ = false;
+    std::string deviceName_;
     
-    // Configurações de mapeamento
+public:
+    ~JoystickDevice() { cleanup(); }
+    
+    // Device management
+    bool initialize() {
+        // Verificar se SDL joystick subsystem está inicializado
+        if (!SDL_WasInit(SDL_INIT_JOYSTICK)) {
+            DebugLogger::error("SDL_INIT_JOYSTICK not initialized!");
+            return false;
+        }
+        
+        int numJoysticks = SDL_NumJoysticks();
+        if (numJoysticks > 0) {
+            if (SDL_IsGameController(0)) {
+                controller_ = SDL_GameControllerOpen(0);
+                if (controller_) {
+                    joystick_ = SDL_GameControllerGetJoystick(controller_);
+                    joystickId_ = 0;
+                    isConnected_ = true;
+                    deviceName_ = SDL_GameControllerName(controller_);
+                    DebugLogger::info("Game controller connected: " + deviceName_);
+                    return true;
+                } else {
+                    DebugLogger::error("Failed to open game controller: " + std::string(SDL_GetError()));
+                }
+            }
+            
+            joystick_ = SDL_JoystickOpen(0);
+            if (joystick_) {
+                joystickId_ = 0;
+                isConnected_ = true;
+                deviceName_ = SDL_JoystickName(joystick_);
+                DebugLogger::info("Joystick connected: " + deviceName_);
+                return true;
+            } else {
+                DebugLogger::error("Failed to open joystick: " + std::string(SDL_GetError()));
+            }
+        }
+        
+        DebugLogger::warning("No joystick/controller found");
+        return false;
+    }
+    
+    void cleanup() {
+        if (controller_) {
+            SDL_GameControllerClose(controller_);
+            controller_ = nullptr;
+        }
+        if (joystick_) {
+            SDL_JoystickClose(joystick_);
+            joystick_ = nullptr;
+        }
+        isConnected_ = false;
+        deviceName_.clear();
+    }
+    
+    // Getters
+    SDL_Joystick* getJoystick() const { return joystick_; }
+    SDL_GameController* getController() const { return controller_; }
+    int getJoystickId() const { return joystickId_; }
+    bool isConnected() const { return isConnected_; }
+    const std::string& getDeviceName() const { return deviceName_; }
+};
+
+/**
+ * @brief Joystick configuration management
+ * 
+ * Handles button mapping and analog settings
+ */
+class JoystickConfig {
+public:
+    // Button mapping
     int buttonLeft = 13;      // D-pad left (padrão)
     int buttonRight = 11;     // D-pad right (padrão)
     int buttonDown = 14;      // D-pad down (padrão)
@@ -1938,166 +2825,357 @@ struct JoystickSystem {
     int buttonStart = 7;      // Start button (padrão)
     int buttonQuit = 8;       // Guide button (padrão)
     
-    // Configurações de analógico
-    float analogDeadzone = 0.3f;  // Zona morta para analógico
-    float analogSensitivity = 1.0f; // Sensibilidade do analógico
-    bool invertYAxis = false;     // Inverter eixo Y (padrão: false)
+    // Analog settings
+    float analogDeadzone = 0.3f;     // Zona morta para analógico
+    float analogSensitivity = 1.0f;  // Sensibilidade do analógico
+    bool invertYAxis = false;        // Inverter eixo Y (padrão: false)
     
-    // Estado dos botões (para detecção de pressionamento)
+    // Timing settings
+    Uint32 moveRepeatDelay = 200;        // ms entre movimentos repetidos
+    Uint32 softDropRepeatDelay = 100;    // ms entre soft drops repetidos
+    
+    // Configuration methods
+    void setButtonMapping(int left, int right, int down, int up, int rotCCW, int rotCW, 
+                         int softDrop, int hardDrop, int pause, int start, int quit) {
+        buttonLeft = left; buttonRight = right; buttonDown = down; buttonUp = up;
+        buttonRotateCCW = rotCCW; buttonRotateCW = rotCW;
+        buttonSoftDrop = softDrop; buttonHardDrop = hardDrop;
+        buttonPause = pause; buttonStart = start; buttonQuit = quit;
+    }
+    
+    void setAnalogSettings(float deadzone, float sensitivity, bool invertY) {
+        analogDeadzone = deadzone;
+        analogSensitivity = sensitivity;
+        invertYAxis = invertY;
+    }
+    
+    void setTiming(Uint32 moveDelay, Uint32 softDropDelay) {
+        moveRepeatDelay = moveDelay;
+        softDropRepeatDelay = softDropDelay;
+    }
+};
+
+/**
+ * @brief Joystick state management
+ * 
+ * Tracks current state of buttons and analog inputs
+ */
+class JoystickState {
+public:
+    // Button states (for press detection)
     bool buttonStates[32] = {false};
     bool lastButtonStates[32] = {false};
     
-    // Estado do analógico
+    // Analog states
     float leftStickX = 0.0f;
     float leftStickY = 0.0f;
     float rightStickX = 0.0f;
     float rightStickY = 0.0f;
     
-    // Timers para repetição de movimento
+    // Timers
     Uint32 lastMoveTime = 0;
-    Uint32 moveRepeatDelay = 200; // ms entre movimentos repetidos (aumentado)
     Uint32 lastSoftDropTime = 0;
-    Uint32 softDropRepeatDelay = 100; // ms entre soft drops repetidos
     
-    bool initialize() {
-        // Tentar conectar um joystick
-        int numJoysticks = SDL_NumJoysticks();
-        if (numJoysticks > 0) {
-            // Tentar usar como game controller primeiro
-            if (SDL_IsGameController(0)) {
-                controller = SDL_GameControllerOpen(0);
-                if (controller) {
-                    joystick = SDL_GameControllerGetJoystick(controller);
-                    joystickId = 0;
-                    isConnected = true;
-                    printf("Game controller connected: %s\n", SDL_GameControllerName(controller));
-                    return true;
-                }
-            }
-            
-            // Fallback para joystick genérico
-            joystick = SDL_JoystickOpen(0);
-            if (joystick) {
-                joystickId = 0;
-                isConnected = true;
-                printf("Joystick connected: %s\n", SDL_JoystickName(joystick));
-                return true;
-            }
-        }
-        
-        printf("No joystick/controller found\n");
-        return false;
-    }
-    
-    void update() {
-        if (!isConnected) return;
-        
-        // Atualizar estado dos botões
+    // State management
+    void updateButtonStates(const JoystickDevice& device, const JoystickConfig& config) {
+        // Copy current states to last states
         for (int i = 0; i < 32; i++) {
             lastButtonStates[i] = buttonStates[i];
-            if (controller) {
-                buttonStates[i] = SDL_GameControllerGetButton(controller, (SDL_GameControllerButton)i);
-            } else if (joystick) {
-                buttonStates[i] = SDL_JoystickGetButton(joystick, i);
+        }
+        
+        // Update current button states
+        // Always use joystick API for generic joysticks, even if detected as game controller
+        if (device.getJoystick()) {
+            // Regular joystick buttons - this works for both generic joysticks and game controllers
+            for (int i = 0; i < 32; i++) {
+                buttonStates[i] = SDL_JoystickGetButton(device.getJoystick(), i);
             }
         }
         
-        // Atualizar analógico
-        if (controller) {
-            leftStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX) / 32767.0f;
-            leftStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY) / 32767.0f;
-            if (invertYAxis) leftStickY = -leftStickY; // Aplicar inversão se configurado
-            rightStickX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTX) / 32767.0f;
-            rightStickY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTY) / 32767.0f;
-            if (invertYAxis) rightStickY = -rightStickY; // Aplicar inversão se configurado
-        } else if (joystick) {
-            leftStickX = SDL_JoystickGetAxis(joystick, 0) / 32767.0f;
-            leftStickY = SDL_JoystickGetAxis(joystick, 1) / 32767.0f;
-            if (invertYAxis) leftStickY = -leftStickY; // Aplicar inversão se configurado
-            if (SDL_JoystickNumAxes(joystick) > 2) {
-                rightStickX = SDL_JoystickGetAxis(joystick, 2) / 32767.0f;
-                rightStickY = SDL_JoystickGetAxis(joystick, 3) / 32767.0f;
-                if (invertYAxis) rightStickY = -rightStickY; // Aplicar inversão se configurado
+        // Update analog states
+        // Always use joystick API for generic joysticks, even if detected as game controller
+        if (device.getJoystick()) {
+            // Regular joystick axes - this works for both generic joysticks and game controllers
+            leftStickX = SDL_JoystickGetAxis(device.getJoystick(), 0) / 32767.0f;
+            leftStickY = SDL_JoystickGetAxis(device.getJoystick(), 1) / 32767.0f;
+            rightStickX = SDL_JoystickGetAxis(device.getJoystick(), 2) / 32767.0f;
+            rightStickY = SDL_JoystickGetAxis(device.getJoystick(), 3) / 32767.0f;
+            
+            // Apply sensitivity and invert Y if needed
+            leftStickX *= config.analogSensitivity;
+            leftStickY *= config.analogSensitivity;
+            rightStickX *= config.analogSensitivity;
+            rightStickY *= config.analogSensitivity;
+            
+            if (config.invertYAxis) {
+                leftStickY = -leftStickY;
+                rightStickY = -rightStickY;
             }
         }
-        
-        // Aplicar zona morta
-        if (std::abs(leftStickX) < analogDeadzone) leftStickX = 0.0f;
-        if (std::abs(leftStickY) < analogDeadzone) leftStickY = 0.0f;
-        if (std::abs(rightStickX) < analogDeadzone) rightStickX = 0.0f;
-        if (std::abs(rightStickY) < analogDeadzone) rightStickY = 0.0f;
     }
     
-    bool isButtonPressed(int button) {
+    bool isButtonPressed(int button) const {
         if (button < 0 || button >= 32) return false;
         return buttonStates[button] && !lastButtonStates[button];
     }
     
-    bool isButtonHeld(int button) {
-        if (button < 0 || button >= 32) return false;
-        return buttonStates[button];
-    }
-    
-    bool shouldMoveLeft() {
-        return isButtonPressed(buttonLeft) || 
-               (leftStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT));
-    }
-    
-    bool shouldMoveRight() {
-        return isButtonPressed(buttonRight) || 
-               (leftStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT));
-    }
-    
-    bool shouldMoveDown() {
-        return isButtonPressed(buttonDown) || 
-               (leftStickY > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN));
-    }
-    
-    bool shouldSoftDrop() {
-        bool dpadDown = (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN));
-        bool analogDown = (leftStickY > analogDeadzone && SDL_GetTicks() - lastSoftDropTime > softDropRepeatDelay);
-        bool buttonPressed = isButtonPressed(buttonSoftDrop);
-        
-        if (dpadDown || analogDown || buttonPressed) {
-            lastSoftDropTime = SDL_GetTicks();
-            return true;
-        }
-        return false;
-    }
-    
-    bool shouldRotateCCW() {
-        return isButtonPressed(buttonRotateCCW) || 
-               (rightStickX < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)) ||
-               (leftStickY < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
-    }
-    
-    bool shouldRotateCW() {
-        return isButtonPressed(buttonRotateCW) || 
-               (rightStickX > analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay) ||
-               (controller && SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP)) ||
-               (leftStickY < -analogDeadzone && SDL_GetTicks() - lastMoveTime > moveRepeatDelay);
-    }
-    
-    void resetMoveTimer() {
+    void resetTimers() {
         lastMoveTime = SDL_GetTicks();
+    }
+};
+
+/**
+ * @brief Joystick input processor
+ * 
+ * Processes joystick input and converts to game actions
+ */
+class JoystickInputProcessor {
+private:
+    const JoystickConfig& config_;
+    const JoystickState& state_;
+    const JoystickDevice& device_;
+    
+public:
+    JoystickInputProcessor(const JoystickConfig& config, const JoystickState& state, const JoystickDevice& device)
+        : config_(config), state_(state), device_(device) {}
+    
+    bool shouldMoveLeft() const {
+        return state_.isButtonPressed(config_.buttonLeft) || 
+               (state_.leftStickX < -config_.analogDeadzone && SDL_GetTicks() - state_.lastMoveTime > config_.moveRepeatDelay) ||
+               (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_LEFT));
+    }
+    
+    bool shouldMoveRight() const {
+        return state_.isButtonPressed(config_.buttonRight) || 
+               (state_.leftStickX > config_.analogDeadzone && SDL_GetTicks() - state_.lastMoveTime > config_.moveRepeatDelay) ||
+               (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_RIGHT));
+    }
+    
+    bool shouldSoftDrop() const {
+        return state_.isButtonPressed(config_.buttonSoftDrop) || 
+               (state_.leftStickY > config_.analogDeadzone && SDL_GetTicks() - state_.lastSoftDropTime > config_.softDropRepeatDelay) ||
+               (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_DOWN));
+    }
+    
+    bool shouldHardDrop() const {
+        return state_.isButtonPressed(config_.buttonHardDrop);
+    }
+    
+    bool shouldRotateCCW() const {
+        return state_.isButtonPressed(config_.buttonRotateCCW) || 
+               (state_.leftStickY < -config_.analogDeadzone && SDL_GetTicks() - state_.lastMoveTime > config_.moveRepeatDelay) ||
+               (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_UP));
+    }
+    
+    bool shouldRotateCW() const {
+        return state_.isButtonPressed(config_.buttonRotateCW) || 
+               (state_.rightStickX > config_.analogDeadzone);
+    }
+    
+    bool shouldPause() const {
+        return state_.isButtonPressed(config_.buttonPause);
+    }
+    
+    bool shouldRestart() const {
+        return state_.isButtonPressed(config_.buttonStart);
+    }
+    
+    bool shouldQuit() const {
+        return state_.isButtonPressed(config_.buttonQuit);
+    }
+    
+    bool shouldScreenshot() const {
+        return false; // Screenshot not supported on joystick
+    }
+};
+
+/**
+ * @brief Main joystick system coordinator
+ * 
+ * Coordinates joystick device, configuration, state, and input processing
+ */
+class JoystickSystem {
+private:
+    JoystickDevice device_;
+    JoystickConfig config_;
+    JoystickState state_;
+    std::unique_ptr<JoystickInputProcessor> processor_;
+    
+public:
+    JoystickSystem() {
+        processor_ = std::make_unique<JoystickInputProcessor>(config_, state_, device_);
+    }
+    
+    // System management
+    bool initialize() {
+        return device_.initialize();
     }
     
     void cleanup() {
-        if (controller) {
-            SDL_GameControllerClose(controller);
-            controller = nullptr;
+        device_.cleanup();
+    }
+    
+    void update() {
+        if (device_.isConnected()) {
+            state_.updateButtonStates(device_, config_);
+            
+            // Debug logging para verificar se os inputs estão sendo detectados
+            static int debugCounter = 0;
+            if (debugCounter++ % 60 == 0) { // Log a cada 60 frames (1 segundo)
+                DebugLogger::debug("Joystick Debug - B0:" + std::to_string(state_.buttonStates[0]) + 
+                                 " B1:" + std::to_string(state_.buttonStates[1]) + 
+                                 " B8:" + std::to_string(state_.buttonStates[8]) + 
+                                 " B9:" + std::to_string(state_.buttonStates[9]) +
+                                 " AXIS0:" + std::to_string(state_.leftStickX) +
+                                 " AXIS1:" + std::to_string(state_.leftStickY));
+            }
         }
-        if (joystick) {
-            SDL_JoystickClose(joystick);
-            joystick = nullptr;
+    }
+    
+    // Configuration
+    JoystickConfig& getConfig() { return config_; }
+    const JoystickConfig& getConfig() const { return config_; }
+    
+    // State access
+    const JoystickState& getState() const { return state_; }
+    const JoystickDevice& getDevice() const { return device_; }
+    
+    // Input processing
+    bool shouldMoveLeft() const { return processor_->shouldMoveLeft(); }
+    bool shouldMoveRight() const { return processor_->shouldMoveRight(); }
+    bool shouldSoftDrop() const { return processor_->shouldSoftDrop(); }
+    bool shouldHardDrop() const { return processor_->shouldHardDrop(); }
+    bool shouldRotateCCW() const { return processor_->shouldRotateCCW(); }
+    bool shouldRotateCW() const { return processor_->shouldRotateCW(); }
+    bool shouldPause() const { return processor_->shouldPause(); }
+    bool shouldRestart() const { return processor_->shouldRestart(); }
+    bool shouldQuit() const { return processor_->shouldQuit(); }
+    bool shouldScreenshot() const { return processor_->shouldScreenshot(); }
+    
+    // Connection status
+    bool isConnected() const { return device_.isConnected(); }
+    
+    // Timer management
+    void resetTimers() { state_.resetTimers(); }
+    
+};
+
+/**
+ * @brief Joystick input handler
+ * 
+ * Handles joystick/controller input with analog and digital support
+ * Now uses the modular JoystickSystem internally
+ */
+class JoystickInput : public InputHandler {
+private:
+    std::unique_ptr<JoystickSystem> joystickSystem_;
+    
+public:
+    JoystickInput() : joystickSystem_(std::make_unique<JoystickSystem>()) {}
+    
+    bool shouldMoveLeft() override {
+        return joystickSystem_ ? joystickSystem_->shouldMoveLeft() : false;
+    }
+    
+    bool shouldMoveRight() override {
+        return joystickSystem_ ? joystickSystem_->shouldMoveRight() : false;
+    }
+    
+    bool shouldSoftDrop() override {
+        return joystickSystem_ ? joystickSystem_->shouldSoftDrop() : false;
+    }
+    
+    bool shouldHardDrop() override {
+        return joystickSystem_ ? joystickSystem_->shouldHardDrop() : false;
+    }
+    
+    bool shouldRotateCCW() override {
+        return joystickSystem_ ? joystickSystem_->shouldRotateCCW() : false;
+    }
+    
+    bool shouldRotateCW() override {
+        return joystickSystem_ ? joystickSystem_->shouldRotateCW() : false;
+    }
+    
+    bool shouldPause() override {
+        return joystickSystem_ ? joystickSystem_->shouldPause() : false;
+    }
+    
+    bool shouldRestart() override {
+        return joystickSystem_ ? joystickSystem_->shouldRestart() : false;
+    }
+    
+    bool shouldQuit() override {
+        return joystickSystem_ ? joystickSystem_->shouldQuit() : false;
+    }
+    
+    bool shouldScreenshot() override {
+        return false; // Screenshot not supported on joystick
+    }
+    
+    void update() override {
+        if (joystickSystem_) {
+            joystickSystem_->update();
         }
-        isConnected = false;
+    }
+    
+    bool isConnected() override {
+        return joystickSystem_ ? joystickSystem_->isConnected() : false;
+    }
+    
+    void resetTimers() override {
+        if (joystickSystem_) {
+            joystickSystem_->resetTimers();
+        }
+    }
+    
+    bool initialize() {
+        return joystickSystem_ ? joystickSystem_->initialize() : false;
+    }
+    
+    void cleanup() {
+        if (joystickSystem_) {
+            joystickSystem_->cleanup();
+        }
+    }
+    
+    // Configuration access
+    JoystickConfig& getConfig() {
+        return joystickSystem_ ? joystickSystem_->getConfig() : throw std::runtime_error("JoystickSystem not initialized");
+    }
+    
+    // Check if joystick has active input (for fallback to keyboard)
+    bool hasActiveInput() {
+        if (!joystickSystem_) return false;
+        
+        const auto& state = joystickSystem_->getState();
+        const auto& config = joystickSystem_->getConfig();
+        
+        // Verificar se há botões pressionados ou movimento analógico
+        for (int i = 0; i < 32; i++) {
+            if (state.buttonStates[i]) return true;
+        }
+        
+        // Verificar movimento analógico
+        if (std::abs(state.leftStickX) > config.analogDeadzone || 
+            std::abs(state.leftStickY) > config.analogDeadzone) {
+            return true;
+        }
+        
+        return false;
     }
 };
+
+// Implementação completa do cleanup do InputManager (após definição de JoystickInput)
+void InputManager::cleanup() {
+    for (auto& handler : handlers) {
+        if (auto* joystick = dynamic_cast<JoystickInput*>(handler.get())) {
+            joystick->cleanup();
+        }
+    }
+    handlers.clear();
+    primaryHandler = nullptr;
+}
 
 // Implementação da função processJoystickConfigs
 static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick) {
@@ -2122,25 +3200,28 @@ static bool processJoystickConfigs(const std::string& key, const std::string& va
         return false; 
     };
 
+    // Get reference to config for easier access
+    JoystickConfig& config = joystick.getConfig();
+
     // Configurações de mapeamento de botões
-    if (seti("JOYSTICK_BUTTON_LEFT", joystick.buttonLeft)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_RIGHT", joystick.buttonRight)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_DOWN", joystick.buttonDown)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_UP", joystick.buttonUp)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_ROTATE_CCW", joystick.buttonRotateCCW)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_ROTATE_CW", joystick.buttonRotateCW)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_SOFT_DROP", joystick.buttonSoftDrop)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_HARD_DROP", joystick.buttonHardDrop)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_PAUSE", joystick.buttonPause)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_START", joystick.buttonStart)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_QUIT", joystick.buttonQuit)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_LEFT", config.buttonLeft)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_RIGHT", config.buttonRight)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_DOWN", config.buttonDown)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_UP", config.buttonUp)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_ROTATE_CCW", config.buttonRotateCCW)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_ROTATE_CW", config.buttonRotateCW)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_SOFT_DROP", config.buttonSoftDrop)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_HARD_DROP", config.buttonHardDrop)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_PAUSE", config.buttonPause)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_START", config.buttonStart)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_QUIT", config.buttonQuit)) { processedLines++; return true; }
     
     // Configurações de analógico
-    if (setf("JOYSTICK_ANALOG_DEADZONE", joystick.analogDeadzone)) { processedLines++; return true; }
-    if (setf("JOYSTICK_ANALOG_SENSITIVITY", joystick.analogSensitivity)) { processedLines++; return true; }
+    if (setf("JOYSTICK_ANALOG_DEADZONE", config.analogDeadzone)) { processedLines++; return true; }
+    if (setf("JOYSTICK_ANALOG_SENSITIVITY", config.analogSensitivity)) { processedLines++; return true; }
     if (key == "JOYSTICK_INVERT_Y_AXIS") {
         int v = std::atoi(val.c_str());
-        joystick.invertYAxis = (v != 0);
+        config.invertYAxis = (v != 0);
         processedLines++;
         return true;
     }
@@ -2149,7 +3230,7 @@ static bool processJoystickConfigs(const std::string& key, const std::string& va
     if (key == "JOYSTICK_MOVE_REPEAT_DELAY") {
         int v = std::atoi(val.c_str());
         if (v >= 50 && v <= 1000) {
-            joystick.moveRepeatDelay = v;
+            config.moveRepeatDelay = v;
             processedLines++;
             return true;
         }
@@ -2157,7 +3238,7 @@ static bool processJoystickConfigs(const std::string& key, const std::string& va
     if (key == "JOYSTICK_SOFT_DROP_DELAY") {
         int v = std::atoi(val.c_str());
         if (v >= 50 && v <= 500) {
-            joystick.softDropRepeatDelay = v;
+            config.softDropRepeatDelay = v;
             processedLines++;
             return true;
         }
@@ -2175,46 +3256,514 @@ static bool processJoystickConfigs(const std::string& key, const std::string& va
     return false;
 }
 
-// Estrutura para estado do jogo
-struct GameState {
-    std::vector<std::vector<Cell>> grid;
-    Active act;
-    std::vector<int> bag;
-    size_t bagPos = 0;
-    std::mt19937 rng;
-    int nextIdx;
-    bool running = true, paused = false, gameover = false;
-    int score = 0, lines = 0, level = 0, tick_ms = TICK_MS_START;
-    Uint32 lastTick;
-    ComboSystem combo;
+// ===========================
+//   SISTEMA DE GAME STATE MODULAR
+// ===========================
+
+/**
+ * @brief Game board management system
+ * 
+ * Handles the game grid, piece placement, collision detection, and line clearing
+ */
+class GameBoard {
+private:
+    std::vector<std::vector<Cell>> grid_;
     
-    GameState() : grid(ROWS, std::vector<Cell>(COLS)), rng((unsigned)time(nullptr)) {}
+public:
+    GameBoard() : grid_(ROWS, std::vector<Cell>(COLS)) {}
+    
+    // Grid access
+    const std::vector<std::vector<Cell>>& getGrid() const { return grid_; }
+    std::vector<std::vector<Cell>>& getGrid() { return grid_; }
+    
+    // Piece placement and collision
+    bool canPlacePiece(const Active& piece, int dx, int dy, int drot) const {
+        return !collides(piece, grid_, dx, dy, drot);
+    }
+    
+    void placePiece(const Active& piece) {
+        lockPiece(piece, grid_);
+    }
+    
+    // Line clearing
+    int clearLines() {
+        int linesCleared = 0;
+        for (int y = ROWS - 1; y >= 0; y--) {
+            bool fullLine = true;
+            for (int x = 0; x < COLS; x++) {
+                if (!grid_[y][x].occ) {
+                    fullLine = false;
+                    break;
+                }
+            }
+            
+            if (fullLine) {
+                grid_.erase(grid_.begin() + y);
+                grid_.insert(grid_.begin(), std::vector<Cell>(COLS));
+                linesCleared++;
+                y++; // Check the same line again
+            }
+        }
+        return linesCleared;
+    }
+    
+    // Game over detection
+    bool isGameOver(const Active& piece) const {
+        return collides(piece, grid_, 0, 0, 0);
+    }
+    
+    // Board state
+    void reset() {
+        for (auto& row : grid_) {
+            for (auto& cell : row) {
+                cell.occ = false;
+            }
+        }
+    }
+    
+    // Tension detection for audio
+    int getTensionLevel() const {
+        int filledRows = 0;
+        for (int y = ROWS - 5; y < ROWS; y++) {  // Últimas 5 linhas
+            bool hasBlocks = false;
+            for (int x = 0; x < COLS; x++) {
+                if (grid_[y][x].occ) { 
+                    hasBlocks = true; 
+                    break; 
+                }
+            }
+            if (hasBlocks) filledRows++;
+        }
+        return filledRows;
+    }
+    
+    // Check tension and play audio
+    void checkTension(AudioSystem& audio) const {
+        int tensionLevel = getTensionLevel();
+        audio.playTensionSound(tensionLevel);
+    }
 };
+
+/**
+ * @brief Score and level management system
+ * 
+ * Handles scoring, level progression, and game speed
+ */
+class ScoreSystem {
+private:
+    int score_ = 0;
+    int lines_ = 0;
+    int level_ = 0;
+    int tickMs_ = TICK_MS_START;
+    
+public:
+    ScoreSystem() = default;
+    
+    // Getters
+    int getScore() const { return score_; }
+    int getLines() const { return lines_; }
+    int getLevel() const { return level_; }
+    int getTickMs() const { return tickMs_; }
+    
+    // Score management
+    void addScore(int points) {
+        score_ += points;
+    }
+    
+    void addLines(int lines) {
+        lines_ += lines;
+        level_ = lines_ / 10; // Level up every 10 lines
+        
+        // Update game speed based on level
+        tickMs_ = TICK_MS_START - (level_ * SPEED_ACCELERATION);
+        if (tickMs_ < TICK_MS_MIN) {
+            tickMs_ = TICK_MS_MIN;
+        }
+    }
+    
+    void reset() {
+        score_ = 0;
+        lines_ = 0;
+        level_ = 0;
+        tickMs_ = TICK_MS_START;
+    }
+    
+    // Configuration
+    void setTickMs(int ms) {
+        tickMs_ = ms;
+    }
+};
+
+/**
+ * @brief Piece management and randomization system
+ * 
+ * Handles piece bag, randomization, and next piece generation
+ */
+class PieceManager {
+private:
+    std::vector<int> bag_;
+    size_t bagPos_ = 0;
+    std::mt19937 rng_;
+    int nextIdx_ = 0;
+    
+public:
+    PieceManager() : rng_((unsigned)time(nullptr)) {
+        // Don't initialize automatically - wait for explicit initialize() call
+        // after PIECES is loaded
+    }
+    
+    // Piece generation
+    int getNextPiece() {
+        if (bagPos_ >= bag_.size()) {
+            refillBag();
+        }
+        
+        int piece = bag_[bagPos_];
+        bagPos_++;
+        return piece;
+    }
+    
+    int getCurrentNextPiece() const {
+        return nextIdx_;
+    }
+    
+    void setNextPiece(int pieceIdx) {
+        nextIdx_ = pieceIdx;
+    }
+    
+    // Bag management
+    void refillBag() {
+        bag_.clear();
+        int n = (RAND_BAG_SIZE > 0 ? RAND_BAG_SIZE : (int)PIECES.size());
+        n = std::min(n, (int)PIECES.size());
+        
+        for (int i = 0; i < n; i++) {
+            bag_.push_back(i);
+        }
+        
+        std::shuffle(bag_.begin(), bag_.end(), rng_);
+        bagPos_ = 0;
+    }
+    
+    void initialize() {
+        refillBag();
+        nextIdx_ = getNextPiece();
+    }
+    
+    void reset() {
+        bagPos_ = 0;
+        initialize();
+    }
+    
+    // Random number generation
+    std::mt19937& getRng() { return rng_; }
+};
+
+/**
+ * @brief Main game state coordinator
+ * 
+ * Coordinates all game systems and provides unified interface
+ */
+class GameState {
+private:
+    GameBoard board_;
+    ScoreSystem score_;
+    PieceManager pieces_;
+    ComboSystem combo_;
+    Active activePiece_;
+    bool running_ = true;
+    bool paused_ = false;
+    bool gameover_ = false;
+    Uint32 lastTick_ = 0;
+    
+public:
+    GameState() {
+        lastTick_ = SDL_GetTicks();
+    }
+    
+    // System access
+    GameBoard& getBoard() { return board_; }
+    const GameBoard& getBoard() const { return board_; }
+    ScoreSystem& getScore() { return score_; }
+    const ScoreSystem& getScore() const { return score_; }
+    PieceManager& getPieces() { return pieces_; }
+    const PieceManager& getPieces() const { return pieces_; }
+    ComboSystem& getCombo() { return combo_; }
+    const ComboSystem& getCombo() const { return combo_; }
+    
+    // Active piece management
+    Active& getActivePiece() { return activePiece_; }
+    const Active& getActivePiece() const { return activePiece_; }
+    
+    void setActivePiece(const Active& piece) { activePiece_ = piece; }
+    
+    // Game state
+    bool isRunning() const { return running_; }
+    bool isPaused() const { return paused_; }
+    bool isGameOver() const { return gameover_; }
+    
+    void setRunning(bool running) { running_ = running; }
+    void setPaused(bool paused) { paused_ = paused; }
+    void setGameOver(bool gameover) { gameover_ = gameover; }
+    
+    // Timing
+    Uint32 getLastTick() const { return lastTick_; }
+    void setLastTick(Uint32 tick) { lastTick_ = tick; }
+    
+    // Game control
+    void reset() {
+        board_.reset();
+        score_.reset();
+        pieces_.reset();
+        combo_.reset();
+        gameover_ = false;
+        paused_ = false;
+        lastTick_ = SDL_GetTicks();
+    }
+    
+    // Piece update logic
+    void updatePiece(AudioSystem& audio) {
+        auto coll = [&](int dx, int dy, int drot) { return !board_.canPlacePiece(activePiece_, dx, dy, drot); };
+    if (!coll(0, 1, 0)) {
+            activePiece_.y++;
+    } else {
+            board_.placePiece(activePiece_);
+        audio.playBeep(220.0, 25, 0.12f, true);  // Som de peça travando - mais sutil
+        
+            int c = board_.clearLines();
+        if (c > 0) {
+                score_.addLines(c);
+            
+            // Sistema de combos
+                combo_.onLineClear(audio);
+            
+            // Som especial para Tetris (4 linhas)
+            if (c == 4) {
+                audio.playTetrisSound();
+            } else {
+                // Som normal de linha limpa - mais responsivo
+                double freq = 440.0 + (c * 110.0);  // 440, 550, 660 Hz para 1, 2, 3 linhas
+                audio.playBeep(freq, 30 + c * 10, 0.18f, false);  // Som mais curto e suave
+            }
+            
+                int points = (c == 1 ? 100 : c == 2 ? 300 : c == 3 ? 500 : 800) * (score_.getLevel() + 1);
+                score_.addScore(points);
+                
+                // Level progression is now handled automatically in ScoreSystem::addLines()
+                // Note: Level up sound should be triggered when level actually changes
+        } else {
+            // Se não limpou linhas, reseta combo
+                combo_.reset();
+            }
+            
+            newActive(activePiece_, pieces_.getCurrentNextPiece()); 
+            pieces_.setNextPiece(pieces_.getNextPiece());
+            if (board_.isGameOver(activePiece_)) { 
+                gameover_ = true; 
+                paused_ = false; 
+                combo_.reset();  // Reseta combo no game over
+            audio.playGameOverSound();  // Som icônico de game over
+        }
+    }
+}
+
+    // Convenience methods for backward compatibility
+    std::vector<std::vector<Cell>>& grid = board_.getGrid();
+    Active& act = activePiece_;
+    bool& running = running_;
+    bool& paused = paused_;
+    bool& gameover = gameover_;
+    Uint32& lastTick = lastTick_;
+    ComboSystem& combo = combo_;
+    
+    // Score system access (using methods instead of direct references)
+    int getScoreValue() const { return score_.getScore(); }
+    int getLinesValue() const { return score_.getLines(); }
+    int getLevelValue() const { return score_.getLevel(); }
+    int getTickMsValue() const { return score_.getTickMs(); }
+    
+    void setScore(int score) { score_.addScore(score - score_.getScore()); }
+    void setLines(int lines) { score_.addLines(lines - score_.getLines()); }
+    void setLevel(int level) { 
+        int currentLines = score_.getLines();
+        int targetLines = level * 10;
+        score_.addLines(targetLines - currentLines);
+    }
+    void setTickMs(int tickMs) { score_.setTickMs(tickMs); }
+    
+    // Access to next piece index
+    int getNextIdx() const { return pieces_.getCurrentNextPiece(); }
+    
+    // ===========================
+    //   INTERFACE LIMPA (FASE 3)
+    // ===========================
+    
+    // Main game loop methods
+    void update(InputManager& inputManager, AudioSystem& audio, SDL_Renderer* renderer) {
+        handleInput(inputManager, audio, renderer);
+        
+        if (!isPaused() && !isGameOver()) {
+            Uint32 now = SDL_GetTicks();
+            if (now - getLastTick() >= (Uint32)getScore().getTickMs()) {
+                updatePiece(audio);
+                setLastTick(now);
+            }
+            
+            // Verificar tensão do tabuleiro
+            getBoard().checkTension(audio);
+            
+            // Música de fundo
+            audio.playBackgroundMelody(getScore().getLevel());
+        }
+    }
+    
+    // Forward declaration - implementation moved after class definitions
+    void render(class RenderManager& renderManager, const class LayoutCache& layout);
+    
+    // Input handling
+    void handleInput(InputManager& inputManager, AudioSystem& audio, SDL_Renderer* renderer) {
+    // Atualizar todos os handlers de input
+    inputManager.update();
+        
+        // Debug: verificar qual handler está ativo (apenas uma vez)
+        static bool debugHandlerLogged = false;
+        if (!debugHandlerLogged) {
+            inputManager.debugActiveHandler();
+            debugHandlerLogged = true;
+        }
+    
+    // Processar eventos SDL (apenas para quit e screenshot)
+    SDL_Event e;
+    while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) setRunning(false);
+    }
+    
+    // Screenshot (apenas teclado)
+    if (inputManager.shouldScreenshot()) {
+        time_t now = time(0);
+        struct tm* timeinfo = localtime(&now);
+        char filename[64];
+        strftime(filename, sizeof(filename), "dropblocks-screenshot_%Y-%m-%d_%H-%M-%S.bmp", timeinfo);
+        
+            if (saveScreenshot(renderer, filename)) audio.playBeep(880.0, 80, 0.18f, false); 
+    }
+    
+    // Quit
+    if (inputManager.shouldQuit()) {
+            setRunning(false);
+    }
+    
+    // Pause
+    if (inputManager.shouldPause()) {
+            setPaused(!isPaused());
+            audio.playBeep(isPaused() ? 440.0 : 520.0, 30, 0.12f, false);
+    }
+    
+    // Game Over - Restart
+        if (isGameOver() && inputManager.shouldRestart()) {
+            reset();
+            pieces_.initialize();
+        audio.playBeep(520.0, 40, 0.15f, false);
+        return;
+    }
+    
+    // Controles de jogo (só funcionam quando não pausado e não em game over)
+        if (!isPaused() && !isGameOver()) {
+            auto coll = [&](int dx, int dy, int drot) { return !board_.canPlacePiece(activePiece_, dx, dy, drot); };
+        
+        // Movimento esquerda
+        if (inputManager.shouldMoveLeft() && !coll(-1, 0, 0)) {
+                DebugLogger::debug("Input: Move Left detected!");
+                activePiece_.x--;
+            audio.playMovementSound();
+            inputManager.resetTimers();
+        }
+        
+        // Movimento direita
+        if (inputManager.shouldMoveRight() && !coll(1, 0, 0)) {
+                DebugLogger::debug("Input: Move Right detected!");
+                activePiece_.x++;
+            audio.playMovementSound();
+            inputManager.resetTimers();
+        }
+        
+        // Soft drop
+        if (inputManager.shouldSoftDrop()) {
+            audio.playSoftDropSound();
+                updatePiece(audio);
+        }
+        
+        // Hard drop
+        if (inputManager.shouldHardDrop()) {
+                while (!coll(0, 1, 0)) activePiece_.y++;
+                score_.addScore(2); // Bonus por hard drop
+            audio.playHardDropSound();
+                updatePiece(audio);
+        }
+        
+        // Rotação CCW
+        if (inputManager.shouldRotateCCW()) {
+                DebugLogger::debug("Input: Rotate CCW detected!");
+                rotateWithKicks(activePiece_, board_.getGrid(), -1, audio);
+            audio.playRotationSound(false);  // CCW
+            inputManager.resetTimers();
+        }
+        
+        // Rotação CW
+        if (inputManager.shouldRotateCW()) {
+                DebugLogger::debug("Input: Rotate CW detected!");
+                rotateWithKicks(activePiece_, board_.getGrid(), +1, audio);
+            audio.playRotationSound(true);   // CW
+            inputManager.resetTimers();
+        }
+    }
+}
+};
+
+/**
+ * @brief Apply game configuration to GameState
+ */
+static void applyConfigToGame(GameState& state, const GameConfig& config) {
+    TICK_MS_START = config.tickMsStart;
+    TICK_MS_MIN = config.tickMsMin;
+    SPEED_ACCELERATION = config.speedAcceleration;
+    LEVEL_STEP = config.levelStep;
+    ASPECT_CORRECTION_FACTOR = config.aspectCorrectionFactor;
+    
+    // Apply configuration to the new modular systems
+    state.getScore().setTickMs(config.tickMsStart);
+}
+
+/**
+ * @brief Apply pieces configuration to global theme
+ */
+static void applyConfigToPieces(const PiecesConfig& config) {
+    DebugLogger::debug("applyConfigToPieces - Applying pieces configuration to THEME");
+    
+    // Apply piece colors
+    if (!config.pieceColors.empty()) {
+        THEME.piece_colors.clear();
+        for (const auto& color : config.pieceColors) {
+            THEME.piece_colors.push_back({color.r, color.g, color.b});
+        }
+        DebugLogger::debug("Applied " + std::to_string(config.pieceColors.size()) + " piece colors");
+    }
+}
 
 // Implementação da função initializeRandomizer
 static void initializeRandomizer(GameState& state) {
-    auto refillBag = [&]() {
-        state.bag.clear();
-        int n = (RAND_BAG_SIZE > 0 ? RAND_BAG_SIZE : (int)PIECES.size());
-        n = std::min(n, (int)PIECES.size());
-        for (int i = 0; i < n; i++) state.bag.push_back(i);
-        std::shuffle(state.bag.begin(), state.bag.end(), state.rng);
-        state.bagPos = 0;
-    };
+    // Use the new PieceManager system
+    state.getPieces().reset();
     
-    auto drawPieceIdx = [&]() {
-        if (RAND_TYPE == RandType::BAG) {
-            if (state.bagPos >= state.bag.size()) refillBag();
-            return state.bag[state.bagPos++];
-        }
-        return (int)(state.rng() % PIECES.size());
-    };
+    // Get the first piece and set it as active
+    int firstPiece = state.getPieces().getNextPiece();
+    newActive(state.getActivePiece(), firstPiece);
     
-    state.nextIdx = drawPieceIdx(); 
-    newActive(state.act, state.nextIdx); 
-    state.nextIdx = drawPieceIdx();
-    state.lastTick = SDL_GetTicks();
-    state.combo.reset();  // Reset combo no início
+    // Set the next piece
+    state.getPieces().setNextPiece(state.getPieces().getNextPiece());
+    
+    state.setLastTick(SDL_GetTicks());
+    state.getCombo().reset();  // Reset combo no início
 }
 
 // Estrutura para cache de layout
@@ -2281,200 +3830,44 @@ struct LayoutCache {
 };
 
 // Função comum para eliminar duplicação
+// DEPRECATED: Use GameState::updatePiece() instead
 static void processPieceFall(GameState& state, AudioSystem& audio) {
-    auto coll = [&](int dx, int dy, int drot) { return collides(state.act, state.grid, dx, dy, drot); };
-    if (!coll(0, 1, 0)) {
-        state.act.y++;
-    } else {
-        lockPiece(state.act, state.grid); 
-        audio.playBeep(220.0, 25, 0.12f, true);  // Som de peça travando - mais sutil
-        
-        int c = clearLines(state.grid);
-        if (c > 0) {
-            state.lines += c; 
-            
-            // Sistema de combos
-            state.combo.onLineClear(audio);
-            
-            // Som especial para Tetris (4 linhas)
-            if (c == 4) {
-                audio.playTetrisSound();
-            } else {
-                // Som normal de linha limpa - mais responsivo
-                double freq = 440.0 + (c * 110.0);  // 440, 550, 660 Hz para 1, 2, 3 linhas
-                audio.playBeep(freq, 30 + c * 10, 0.18f, false);  // Som mais curto e suave
-            }
-            
-            state.score += (c == 1 ? 100 : c == 2 ? 300 : c == 3 ? 500 : 800) * (state.level + 1);
-            int lv = state.lines / LEVEL_STEP; 
-            if (lv > state.level) { 
-                state.level = lv; 
-                state.tick_ms = std::max(TICK_MS_MIN, TICK_MS_START - state.level * SPEED_ACCELERATION);
-                audio.playLevelUpSound();  // Som de level up
-            }
-        } else {
-            // Se não limpou linhas, reseta combo
-            state.combo.reset();
-        }
-        
-        newActive(state.act, state.nextIdx); 
-        state.nextIdx = (int)(state.rng() % PIECES.size()); 
-        if (coll(0, 0, 0)) { 
-            state.gameover = true; 
-            state.paused = false; 
-            state.combo.reset();  // Reseta combo no game over
-            audio.playGameOverSound();  // Som icônico de game over
-        }
-    }
+    state.updatePiece(audio);
 }
 
+// DEPRECATED: Use GameState::handleInput() instead
 static void handleInput(GameState& state, AudioSystem& audio, SDL_Renderer* ren, InputManager& inputManager) {
-    // Atualizar todos os handlers de input
-    inputManager.update();
-    
-    // Processar eventos SDL (apenas para quit e screenshot)
-    SDL_Event e;
-    while (SDL_PollEvent(&e)) {
-        if (e.type == SDL_QUIT) state.running = false;
-    }
-    
-    // Screenshot (apenas teclado)
-    if (inputManager.shouldScreenshot()) {
-        time_t now = time(0);
-        struct tm* timeinfo = localtime(&now);
-        char filename[64];
-        strftime(filename, sizeof(filename), "dropblocks-screenshot_%Y-%m-%d_%H-%M-%S.bmp", timeinfo);
-        
-        if (saveScreenshot(ren, filename)) audio.playBeep(880.0, 80, 0.18f, false); 
-    }
-    
-    // Quit
-    if (inputManager.shouldQuit()) {
-        state.running = false;
-    }
-    
-    // Pause
-    if (inputManager.shouldPause()) {
-        state.paused = !state.paused;
-        audio.playBeep(state.paused ? 440.0 : 520.0, 30, 0.12f, false);
-    }
-    
-    // Game Over - Restart
-    if (state.gameover && inputManager.shouldRestart()) {
-        for (auto& r : state.grid) for (auto& c : r) { c.occ = false; }
-        state.score = 0; state.lines = 0; state.level = 0; state.tick_ms = TICK_MS_START;
-        state.gameover = false; state.paused = false;
-        initializeRandomizer(state);
-        audio.playBeep(520.0, 40, 0.15f, false);
-        return;
-    }
-    
-    // Controles de jogo (só funcionam quando não pausado e não em game over)
-    if (!state.paused && !state.gameover) {
-        auto coll = [&](int dx, int dy, int drot) { return collides(state.act, state.grid, dx, dy, drot); };
-        
-        // Movimento esquerda
-        if (inputManager.shouldMoveLeft() && !coll(-1, 0, 0)) {
-            state.act.x--;
-            audio.playMovementSound();
-            inputManager.resetTimers();
-        }
-        
-        // Movimento direita
-        if (inputManager.shouldMoveRight() && !coll(1, 0, 0)) {
-            state.act.x++;
-            audio.playMovementSound();
-            inputManager.resetTimers();
-        }
-        
-        // Soft drop
-        if (inputManager.shouldSoftDrop()) {
-            audio.playSoftDropSound();
-            processPieceFall(state, audio);
-        }
-        
-        // Hard drop
-        if (inputManager.shouldHardDrop()) {
-            while (!coll(0, 1, 0)) state.act.y++;
-            state.score += 2; // Bonus por hard drop
-            audio.playHardDropSound();
-            processPieceFall(state, audio);
-        }
-        
-        // Rotação CCW
-        if (inputManager.shouldRotateCCW()) {
-            rotateWithKicks(state.act, state.grid, -1, audio);
-            audio.playRotationSound(false);  // CCW
-            inputManager.resetTimers();
-        }
-        
-        // Rotação CW
-        if (inputManager.shouldRotateCW()) {
-            rotateWithKicks(state.act, state.grid, +1, audio);
-            audio.playRotationSound(true);   // CW
-            inputManager.resetTimers();
-        }
-    }
+    state.handleInput(inputManager, audio, ren);
 }
 
+// DEPRECATED: Use GameBoard::checkTension() instead
 static void checkTensionSound(const GameState& state, AudioSystem& audio) {
-    int filledRows = 0;
-    for (int y = ROWS - 5; y < ROWS; y++) {  // Últimas 5 linhas
-        bool hasBlocks = false;
-        for (int x = 0; x < COLS; x++) {
-            if (state.grid[y][x].occ) { hasBlocks = true; break; }
-        }
-        if (hasBlocks) filledRows++;
-    }
-    
-    audio.playTensionSound(filledRows);
+    state.getBoard().checkTension(audio);
 }
 
+// DEPRECATED: Use GameState::update() instead
 static void updateGame(GameState& state, AudioSystem& audio) {
-    if (!state.paused && !state.gameover) {
-        Uint32 now = SDL_GetTicks();
-        if (now - state.lastTick >= (Uint32)state.tick_ms) {
-            processPieceFall(state, audio);
-            state.lastTick = now;
-        }
-        
-        // Verificar tensão do tabuleiro
-        checkTensionSound(state, audio);
-        
-        // Música de fundo
-        audio.playBackgroundMelody(state.level);
-    }
+    // This function is now handled by GameState::update()
+    // Keeping for backward compatibility but functionality moved to GameState
 }
 
 // Funções especializadas extraídas da main
 static bool initializeSDL() {
-    DebugLogger::debug("initializeSDL - Step 1: Initializing SDL VIDEO subsystem");
-    
     // Inicializar cada subsistema separadamente para maior compatibilidade
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         DebugLogger::error("SDL_INIT_VIDEO error: " + std::string(SDL_GetError()));
         return false;
     }
     
-    DebugLogger::debug("initializeSDL - VIDEO subsystem initialized successfully");
-    
-    DebugLogger::debug("initializeSDL - Step 2: Initializing SDL TIMER subsystem");
-    
     if (SDL_Init(SDL_INIT_TIMER) != 0) {
         DebugLogger::error("SDL_INIT_TIMER error: " + std::string(SDL_GetError()));
         return false;
     }
     
-    DebugLogger::debug("initializeSDL - TIMER subsystem initialized successfully");
-    
-    DebugLogger::debug("initializeSDL - Step 3: Initializing SDL EVENTS subsystem");
-    
     if (SDL_Init(SDL_INIT_EVENTS) != 0) {
         DebugLogger::error("SDL_INIT_EVENTS error: " + std::string(SDL_GetError()));
         return false;
     }
-    
-    DebugLogger::debug("initializeSDL - EVENTS subsystem initialized successfully");
     
     // Áudio e gamepad são opcionais
     if (SDL_Init(SDL_INIT_AUDIO) != 0) {
@@ -2489,21 +3882,59 @@ static bool initializeSDL() {
         SDL_Log("Warning: SDL_INIT_JOYSTICK failed: %s", SDL_GetError());
     }
     
-    DebugLogger::debug("initializeSDL - All SDL subsystems initialized successfully");
-    
     return true;
 }
 
-static bool initializeGame(GameState& state, AudioSystem& audio) {
-    DebugLogger::debug("initializeGame - Step 1: Creating temp JoystickSystem");
+static void applyConfigToJoystick(InputManager& inputManager, const InputConfig& config) {
+    // Find JoystickInput handler in InputManager
+    for (auto& handler : inputManager.getHandlers()) {
+        if (auto* joystickInput = dynamic_cast<JoystickInput*>(handler.get())) {
+            JoystickConfig& joystickConfig = joystickInput->getConfig();
+            
+            // Apply button mappings
+            joystickConfig.buttonLeft = config.buttonLeft;
+            joystickConfig.buttonRight = config.buttonRight;
+            joystickConfig.buttonDown = config.buttonDown;
+            joystickConfig.buttonUp = config.buttonUp;
+            joystickConfig.buttonRotateCCW = config.buttonRotateCCW;
+            joystickConfig.buttonRotateCW = config.buttonRotateCW;
+            joystickConfig.buttonSoftDrop = config.buttonSoftDrop;
+            joystickConfig.buttonHardDrop = config.buttonHardDrop;
+            joystickConfig.buttonPause = config.buttonPause;
+            joystickConfig.buttonStart = config.buttonStart;
+            joystickConfig.buttonQuit = config.buttonQuit;
+            
+            // Apply analog settings
+            joystickConfig.analogDeadzone = config.analogDeadzone;
+            joystickConfig.analogSensitivity = config.analogSensitivity;
+            joystickConfig.invertYAxis = config.invertYAxis;
+            
+            // Apply timing settings
+            joystickConfig.moveRepeatDelay = config.moveRepeatDelay;
+            joystickConfig.softDropRepeatDelay = config.softDropRepeatDelay;
+            
+            return;
+        }
+    }
     
-    // Carregar configuração (criar JoystickSystem temporário para compatibilidade)
-    JoystickSystem tempJoystick;
+    DebugLogger::warning("No JoystickInput handler found for configuration");
+}
+
+static bool initializeGame(GameState& state, AudioSystem& audio, ConfigManager& configManager, InputManager& inputManager) {
+    // Load configuration using new system
+    if (!configManager.loadAll()) {
+        DebugLogger::error("Failed to load configuration");
+        return false;
+    }
     
-    DebugLogger::debug("initializeGame - Step 2: Loading config file");
-    loadConfigFile(audio, tempJoystick);
+    // Apply configuration to existing systems
+    applyConfigToAudio(audio, configManager.getAudio());
+    applyConfigToTheme(configManager.getVisual());
+    applyConfigToGame(state, configManager.getGame());
+    applyConfigToPieces(configManager.getPieces());
     
-    DebugLogger::debug("initializeGame - Step 3: Config file loaded successfully");
+    // Apply joystick configuration to InputManager
+    applyConfigToJoystick(inputManager, configManager.getInput());
     
     // Carregar peças
     bool piecesOk = loadPiecesFile();
@@ -2513,6 +3944,10 @@ static bool initializeGame(GameState& state, AudioSystem& audio) {
     
     // Aplicar tema
     applyThemePieceColors();
+    
+    // Initialize PieceManager after PIECES is loaded
+    state.getPieces().initialize();
+    
     printf("Pieces: %zu, PreviewGrid=%d, Randomizer=%s, BagSize=%d\n",
            PIECES.size(), PREVIEW_GRID, (RAND_TYPE == RandType::BAG ? "bag" : "simple"), RAND_BAG_SIZE);
     printf("Audio: Master=%.1f, SFX=%.1f, Ambient=%.1f\n", 
@@ -2523,18 +3958,12 @@ static bool initializeGame(GameState& state, AudioSystem& audio) {
 }
 
 static bool initializeWindow(SDL_Window*& win, SDL_Renderer*& ren) {
-    DebugLogger::debug("initializeWindow - Step 1: Getting display mode");
-    
     SDL_DisplayMode dm; 
     if (SDL_GetCurrentDisplayMode(0, &dm) != 0) {
         DebugLogger::error("Failed to get display mode: " + std::string(SDL_GetError()));
         return false;
     }
     int SW = dm.w, SH = dm.h;
-    
-    DebugLogger::debug("initializeWindow - Display mode: " + std::to_string(SW) + "x" + std::to_string(SH));
-    
-    DebugLogger::debug("initializeWindow - Step 2: Creating window");
     
     win = SDL_CreateWindow("DropBlocks", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SW, SH,
                           SDL_WINDOW_FULLSCREEN | SDL_WINDOW_ALLOW_HIGHDPI);
@@ -2543,24 +3972,14 @@ static bool initializeWindow(SDL_Window*& win, SDL_Renderer*& ren) {
         return false; 
     }
     
-    DebugLogger::debug("initializeWindow - Window created successfully");
-    
-    DebugLogger::debug("initializeWindow - Step 3: Creating renderer");
-    
     ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!ren) { 
         DebugLogger::error("Failed to create renderer: " + std::string(SDL_GetError()));
         return false; 
     }
     
-    DebugLogger::debug("initializeWindow - Renderer created successfully");
-    
-    DebugLogger::debug("initializeWindow - Step 4: Hiding cursor");
-    
     // Esconder cursor do mouse
     SDL_ShowCursor(SDL_DISABLE);
-    
-    DebugLogger::debug("initializeWindow - Window initialization completed successfully");
     
     return true;
 }
@@ -2739,11 +4158,11 @@ public:
         // HUD textos
         int tx = layout.panelX + 14, ty = layout.panelY + 14;
         drawPixelText(renderer, tx, ty, "SCORE", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 10 * layout.scale;
-        drawPixelText(renderer, tx, ty, fmtScore(state.score), layout.scale + 1, THEME.hud_score_r, THEME.hud_score_g, THEME.hud_score_b); ty += 12 * (layout.scale + 1);
+        drawPixelText(renderer, tx, ty, fmtScore(state.getScoreValue()), layout.scale + 1, THEME.hud_score_r, THEME.hud_score_g, THEME.hud_score_b); ty += 12 * (layout.scale + 1);
         drawPixelText(renderer, tx, ty, "LINES", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
-        drawPixelText(renderer, tx, ty, std::to_string(state.lines), layout.scale, THEME.hud_lines_r, THEME.hud_lines_g, THEME.hud_lines_b); ty += 10 * layout.scale;
+        drawPixelText(renderer, tx, ty, std::to_string(state.getLinesValue()), layout.scale, THEME.hud_lines_r, THEME.hud_lines_g, THEME.hud_lines_b); ty += 10 * layout.scale;
         drawPixelText(renderer, tx, ty, "LEVEL", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
-        drawPixelText(renderer, tx, ty, std::to_string(state.level), layout.scale, THEME.hud_level_r, THEME.hud_level_g, THEME.hud_level_b); ty += 10 * layout.scale;
+        drawPixelText(renderer, tx, ty, std::to_string(state.getLevelValue()), layout.scale, THEME.hud_level_r, THEME.hud_level_g, THEME.hud_level_b); ty += 10 * layout.scale;
 
         // NEXT (quadro PREVIEW_GRID × PREVIEW_GRID)
         int boxW = layout.panelW - 28;
@@ -2789,7 +4208,7 @@ public:
 
         // peça próxima centrada
         {
-            auto& np = PIECES[state.nextIdx];
+            auto& np = PIECES[state.getNextIdx()];
             int minx = 999, maxx = -999, miny = 999, maxy = -999;
             for (auto [px, py] : np.rot[0]) { 
                 minx = std::min(minx, px); maxx = std::max(maxx, px); 
@@ -2957,6 +4376,15 @@ public:
 };
 
 // ===========================
+//   IMPLEMENTAÇÃO DE MÉTODOS DO GAMESTATE
+// ===========================
+
+// Implementação do método render do GameState
+void GameState::render(RenderManager& renderManager, const LayoutCache& layout) {
+    renderManager.render(*this, layout);
+}
+
+// ===========================
 //   FUNÇÕES DE RENDERIZAÇÃO (LEGADO - MANTIDAS PARA COMPATIBILIDADE)
 // ===========================
 
@@ -3062,11 +4490,11 @@ static void renderHUD(SDL_Renderer* ren, const GameState& state, const LayoutCac
     // HUD textos
     int tx = layout.panelX + 14, ty = layout.panelY + 14;
     drawPixelText(ren, tx, ty, "SCORE", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 10 * layout.scale;
-    drawPixelText(ren, tx, ty, fmtScore(state.score), layout.scale + 1, THEME.hud_score_r, THEME.hud_score_g, THEME.hud_score_b); ty += 12 * (layout.scale + 1);
+    drawPixelText(ren, tx, ty, fmtScore(state.getScoreValue()), layout.scale + 1, THEME.hud_score_r, THEME.hud_score_g, THEME.hud_score_b); ty += 12 * (layout.scale + 1);
     drawPixelText(ren, tx, ty, "LINES", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
-    drawPixelText(ren, tx, ty, std::to_string(state.lines), layout.scale, THEME.hud_lines_r, THEME.hud_lines_g, THEME.hud_lines_b); ty += 10 * layout.scale;
+    drawPixelText(ren, tx, ty, std::to_string(state.getLinesValue()), layout.scale, THEME.hud_lines_r, THEME.hud_lines_g, THEME.hud_lines_b); ty += 10 * layout.scale;
     drawPixelText(ren, tx, ty, "LEVEL", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
-    drawPixelText(ren, tx, ty, std::to_string(state.level), layout.scale, THEME.hud_level_r, THEME.hud_level_g, THEME.hud_level_b); ty += 10 * layout.scale;
+    drawPixelText(ren, tx, ty, std::to_string(state.getLevelValue()), layout.scale, THEME.hud_level_r, THEME.hud_level_g, THEME.hud_level_b); ty += 10 * layout.scale;
 
     // NEXT (quadro PREVIEW_GRID × PREVIEW_GRID)
     int boxW = layout.panelW - 28;
@@ -3112,7 +4540,7 @@ static void renderHUD(SDL_Renderer* ren, const GameState& state, const LayoutCac
 
     // peça próxima centrada
     {
-        auto& np = PIECES[state.nextIdx];
+        auto& np = PIECES[state.getNextIdx()];
         int minx = 999, maxx = -999, miny = 999, maxy = -999;
         for (auto [px, py] : np.rot[0]) { 
             minx = std::min(minx, px); maxx = std::max(maxx, px); 
@@ -3203,24 +4631,19 @@ static void renderPostEffects(SDL_Renderer* ren, const LayoutCache& layout, Audi
  */
 int main(int, char**) {
     printf("=== DROPBLOCKS STARTING ===\n");
-    printf("VERSION: 5.2 - Configurable Speed & Aspect Correction\n");
+    printf("VERSION: %s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
     printf("BUILD: %s %s\n", __DATE__, __TIME__);
-    printf("FIXES: Added step-by-step debugging to identify exact crash location\n");
+    printf("FEATURES: %s\n", DROPBLOCKS_FEATURES);
     fflush(stdout);
 
     // Inicialização
-    DebugLogger::debug("Step 1 - Initializing SDL2...");
     if (!initializeSDL()) return 1;
-    DebugLogger::debug("Step 1 - SDL2 initialized successfully");
     
-    DebugLogger::debug("Step 2 - Initializing AudioSystem...");
     AudioSystem audio;
     if (!audio.initialize()) {
         DebugLogger::warning("Audio initialization failed, continuing without sound");
     }
-    DebugLogger::debug("Step 2 - AudioSystem initialized");
     
-    DebugLogger::debug("Step 2.5 - Initializing InputManager...");
     InputManager inputManager;
     
     // Adicionar keyboard input (sempre disponível)
@@ -3230,25 +4653,25 @@ int main(int, char**) {
     // Tentar adicionar joystick input
     auto joystickInput = std::make_unique<JoystickInput>();
     if (joystickInput->initialize()) {
+        // Armazenar ponteiro antes de mover
+        InputHandler* joystickPtr = joystickInput.get();
         inputManager.addHandler(std::move(joystickInput));
-        DebugLogger::info("Joystick/controller input enabled");
+        // Definir JoystickInput como handler primário (prioridade sobre teclado)
+        inputManager.setPrimaryHandler(joystickPtr);
+        DebugLogger::info("Joystick/controller input enabled and set as primary");
     } else {
         DebugLogger::warning("No joystick/controller found, continuing with keyboard only");
     }
-    DebugLogger::debug("Step 2.5 - InputManager initialized");
     
-    DebugLogger::debug("Step 3 - Initializing GameState...");
+    ConfigManager configManager;
+    
     GameState state;
-    if (!initializeGame(state, audio)) return 1;
-    DebugLogger::debug("Step 3 - GameState initialized successfully");
+    if (!initializeGame(state, audio, configManager, inputManager)) return 1;
     
-    DebugLogger::debug("Step 4 - Initializing Window...");
     SDL_Window* win = nullptr;
     SDL_Renderer* ren = nullptr;
     if (!initializeWindow(win, ren)) return 1;
-    DebugLogger::debug("Step 4 - Window initialized successfully");
     
-    DebugLogger::debug("Step 4.5 - Initializing RenderManager...");
     RenderManager renderManager(ren);
     
     // Adicionar camadas de renderização
@@ -3259,25 +4682,43 @@ int main(int, char**) {
     renderManager.addLayer(std::make_unique<OverlayLayer>());
     renderManager.addLayer(std::make_unique<PostEffectsLayer>(&audio));
     
-    DebugLogger::debug("Step 4.5 - RenderManager initialized with " + std::to_string(renderManager.getLayerNames().size()) + " layers");
-    
-    DebugLogger::debug("Step 5 - Initializing Randomizer...");
     initializeRandomizer(state);
-    DebugLogger::debug("Step 5 - Randomizer initialized successfully");
 
-    // Loop principal
-    while (state.running) {
-        handleInput(state, audio, ren, inputManager);
-        updateGame(state, audio);
+    // Debug destacado ao final da inicialização
+    printf("\n");
+    printf("========================================\n");
+    printf("🎮 DROPBLOCKS %s INICIALIZADO COM SUCESSO! 🎮\n", DROPBLOCKS_VERSION);
+    printf("========================================\n");
+    printf("✅ SDL2: OK\n");
+    printf("✅ Audio: OK\n");
+    printf("✅ Input: OK\n");
+    printf("✅ Config: OK\n");
+    printf("✅ GameState: OK\n");
+    printf("✅ Window: OK\n");
+    printf("✅ Render: OK\n");
+    printf("✅ Randomizer: OK\n");
+    printf("========================================\n");
+    printf("🎯 CONTROLES:\n");
+    printf("   Teclado: ← → ↓ Z X SPACE P ENTER ESC\n");
+    printf("   Joystick: D-pad + B0,B1,B8,B9\n");
+    printf("========================================\n");
+    printf("🚀 INICIANDO JOGO...\n");
+    printf("\n");
+    fflush(stdout);
 
+    // Loop principal - usando interface limpa
+    while (state.isRunning()) {
         // Cache de layout
         static LayoutCache layout;
         if (layout.dirty) {
             layout.calculate();
         }
 
-        // Renderização modular usando RenderManager
-        renderManager.render(state, layout);
+        // Update game state (input, logic, audio)
+        state.update(inputManager, audio, ren);
+        
+        // Render game
+        state.render(renderManager, layout);
 
         SDL_RenderPresent(ren);
         SDL_Delay(1);
