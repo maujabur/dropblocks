@@ -1,0 +1,46 @@
+# Pasta de arquivos antigos - NÃO SINCRONIZAR
+old/
+
+# Arquivos de compilação
+*.exe
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+
+# Arquivos de log
+*.log
+compilacao.log
+compilation.log
+
+# Screenshots
+*.bmp
+*.png
+*.jpg
+dropblocks-screenshot_*
+
+# Arquivos temporários
+*.tmp
+*.temp
+*~
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Arquivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Arquivos de backup
+*.bak
+*.backup
+*_backup.*
+
+# Arquivos de configuração local (opcional)
+# local.cfg
+# user.cfg
