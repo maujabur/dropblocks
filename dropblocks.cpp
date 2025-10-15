@@ -61,6 +61,161 @@
 #define DROPBLOCKS_VERSION "6.9"
 #define DROPBLOCKS_BUILD_INFO "Phase 4: AudioSystem Modular Refactoring Complete"
 #define DROPBLOCKS_FEATURES "Modular AudioSystem with AudioDevice, AudioConfig, SoundEffects - eliminated temporary variables - cleaned debug verbosity"
+
+// ===========================
+//   FORWARD DECLARATIONS
+// ===========================
+// Forward declarations for structures
+struct Theme;
+struct Piece;
+enum class RandType;
+struct VisualConfig;
+struct AudioConfig;
+struct InputConfig;
+struct PiecesConfig;
+struct GameConfig;
+
+// ===========================
+//   INTERFACES ABSTRATAS
+// ===========================
+
+/**
+ * @brief Interface for audio system
+ * 
+ * Defines the contract for audio functionality
+ */
+class IAudioSystem {
+public:
+    virtual ~IAudioSystem() = default;
+    
+    // Initialization and cleanup
+    virtual bool initialize() = 0;
+    virtual void cleanup() = 0;
+    
+    // Basic synthesis
+    virtual void playBeep(double freq, int ms, float vol = 0.25f, bool square = true) = 0;
+    virtual void playChord(double baseFreq, int notes[], int count, int ms, float vol = 0.15f) = 0;
+    virtual void playArpeggio(double baseFreq, int notes[], int count, int noteMs, float vol = 0.12f) = 0;
+    virtual void playSweep(double startFreq, double endFreq, int ms, float vol = 0.10f) = 0;
+    
+    // Game-specific sounds
+    virtual void playMovementSound() = 0;
+    virtual void playRotationSound(bool cw = true) = 0;
+    virtual void playSoftDropSound() = 0;
+    virtual void playHardDropSound() = 0;
+    virtual void playKickSound() = 0;
+    virtual void playLevelUpSound() = 0;
+    virtual void playGameOverSound() = 0;
+    virtual void playComboSound(int combo) = 0;
+    virtual void playTetrisSound() = 0;
+    virtual void playBackgroundMelody(int level) = 0;
+    virtual void playTensionSound(int filledRows) = 0;
+    virtual void playSweepEffect() = 0;
+    virtual void playScanlineEffect() = 0;
+    
+    // Configuration
+    virtual bool loadFromConfig(const std::string& key, const std::string& value) = 0;
+};
+
+/**
+ * @brief Interface for theme management
+ * 
+ * Defines the contract for theme functionality
+ */
+class IThemeManager {
+public:
+    virtual ~IThemeManager() = default;
+    
+    // Theme access
+    virtual const Theme& getTheme() const = 0;
+    virtual Theme& getTheme() = 0;
+    
+    // Theme management
+    virtual void initDefaultPieceColors() = 0;
+    virtual void applyPieceColors(const std::vector<Piece>& pieces) = 0;
+    virtual bool loadFromConfig(const std::string& key, const std::string& value) = 0;
+};
+
+/**
+ * @brief Interface for piece management
+ * 
+ * Defines the contract for piece functionality
+ */
+class IPieceManager {
+public:
+    virtual ~IPieceManager() = default;
+    
+    // Piece generation
+    virtual int getNextPiece() = 0;
+    virtual int getCurrentNextPiece() const = 0;
+    virtual void setNextPiece(int pieceIdx) = 0;
+    
+    // Initialization and reset
+    virtual void initialize() = 0;
+    virtual void reset() = 0;
+    virtual void initializeRandomizer() = 0;
+    
+    // Configuration
+    virtual int getPreviewGrid() const = 0;
+    virtual void setPreviewGrid(int grid) = 0;
+    virtual RandType getRandomizerType() const = 0;
+    virtual void setRandomizerType(RandType type) = 0;
+    virtual int getRandBagSize() const = 0;
+    virtual void setRandBagSize(int size) = 0;
+    
+    // Piece loading
+    virtual bool loadPiecesFile() = 0;
+    virtual void seedFallback() = 0;
+};
+
+/**
+ * @brief Interface for input management
+ * 
+ * Defines the contract for input functionality
+ */
+class IInputManager {
+public:
+    virtual ~IInputManager() = default;
+    
+    // Input actions
+    virtual bool shouldMoveLeft() = 0;
+    virtual bool shouldMoveRight() = 0;
+    virtual bool shouldSoftDrop() = 0;
+    virtual bool shouldHardDrop() = 0;
+    virtual bool shouldRotateCCW() = 0;
+    virtual bool shouldRotateCW() = 0;
+    virtual bool shouldPause() = 0;
+    virtual bool shouldRestart() = 0;
+    virtual bool shouldQuit() = 0;
+    virtual bool shouldScreenshot() = 0;
+    
+    // System methods
+    virtual void update() = 0;
+    virtual void resetTimers() = 0;
+};
+
+/**
+ * @brief Interface for game configuration
+ * 
+ * Defines the contract for configuration functionality
+ */
+class IGameConfig {
+public:
+    virtual ~IGameConfig() = default;
+    
+    // Configuration access
+    virtual const VisualConfig& getVisual() const = 0;
+    virtual const AudioConfig& getAudio() const = 0;
+    virtual const InputConfig& getInput() const = 0;
+    virtual const PiecesConfig& getPieces() const = 0;
+    virtual const GameConfig& getGame() const = 0;
+    
+    // Configuration management
+    virtual bool loadFromFile(const std::string& path) = 0;
+    virtual bool loadFromEnvironment() = 0;
+    virtual bool validate() const = 0;
+    virtual void setOverride(const std::string& key, const std::string& value) = 0;
+};
 #include <algorithm>
 #include <cmath>
 #include <cctype>
@@ -289,7 +444,7 @@ struct GameConfig {
  * 
  * Manages all configuration categories and provides unified access
  */
-class ConfigManager {
+class ConfigManager : public IGameConfig {
 private:
     VisualConfig visual_;
     AudioConfig audio_;
@@ -661,7 +816,7 @@ static bool parseHexColor(const std::string& s, Uint8& r, Uint8& g, Uint8& b);
  * Manages visual theme configuration including colors, transparency values,
  * and visual effect parameters.
  */
-class ThemeManager {
+class ThemeManager : public IThemeManager {
 private:
     Theme theme_;
     
@@ -708,6 +863,12 @@ public:
                 // Se a peça já tem cor do arquivo, mantém ela (não sobrescreve)
             }
         }
+    }
+    
+    // Const version for interface compliance
+    void applyPieceColors(const std::vector<Piece>& pieces) override {
+        // Cast away const for the non-const version
+        applyPieceColors(const_cast<std::vector<Piece>&>(pieces));
     }
     
     // Configuration loading
@@ -1752,7 +1913,7 @@ public:
  * 
  * Coordinates AudioDevice, AudioConfig, and SoundEffects
  */
-struct AudioSystem {
+struct AudioSystem : public IAudioSystem {
 private:
     AudioDevice device_;
     AudioConfig config_;
@@ -2624,7 +2785,7 @@ private:
  * 
  * Manages multiple input handlers and provides unified input processing
  */
-class InputManager {
+class InputManager : public IInputManager {
 private:
     std::vector<std::unique_ptr<InputHandler>> handlers;
     InputHandler* primaryHandler = nullptr;
@@ -3369,7 +3530,7 @@ public:
  * 
  * Handles piece bag, randomization, and next piece generation
  */
-class PieceManager {
+class PieceManager : public IPieceManager {
 private:
     std::vector<int> bag_;
     size_t bagPos_ = 0;
