@@ -3,6 +3,8 @@
 # Script de compilação e execução do DropBlocks
 # Para uso no MSYS2 UCRT64
 
+clear
+
 echo "🚀 Iniciando compilação do DropBlocks..."
 
 # Navegar para o diretório do projeto
@@ -28,7 +30,8 @@ if [ $? -eq 0 ]; then
     echo "----------------------------------------"
     
     # Executar o jogo
-    ./dropblocks.exe
+    #./dropblocks.exe
+    DROPBLOCKS_CFG="generic.cfg" DROPBLOCKS_PIECES="tetrominos.pieces" ./dropblocks.exe
     
     echo "----------------------------------------"
     echo "🏁 DropBlocks finalizado."

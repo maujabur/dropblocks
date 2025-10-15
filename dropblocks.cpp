@@ -42,6 +42,13 @@
  * - C++17 compatible compiler
  */
 
+// TODO: add a configurable countdown timer for use in expositions
+// TODO: check hard drop moving pieces to the right
+// TODO: add piece statistics
+
+// TODO: make regions configurable by position and size
+// TODO: enhance resolution ans screen ratio system
+
 #include <SDL2/SDL.h>
 #include <vector>
 #include <string>
@@ -51,9 +58,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "6.4"
-#define DROPBLOCKS_BUILD_INFO "Debug Cleanup + Input Fixes"
-#define DROPBLOCKS_FEATURES "Refactored JoystickSystem, InputManager, ConfigManager, RenderManager, Clean Logs"
+#define DROPBLOCKS_VERSION "6.9"
+#define DROPBLOCKS_BUILD_INFO "Phase 4: AudioSystem Modular Refactoring Complete"
+#define DROPBLOCKS_FEATURES "Modular AudioSystem with AudioDevice, AudioConfig, SoundEffects - eliminated temporary variables - cleaned debug verbosity"
 #include <algorithm>
 #include <cmath>
 #include <cctype>
@@ -195,18 +202,31 @@ struct VisualConfig {
 };
 
 /**
- * @brief Audio configuration structure
+ * @brief Audio configuration and settings
  * 
- * Contains all audio settings including volumes and sound toggles
+ * Manages all audio-related configuration options
  */
-struct AudioConfig {
+class AudioConfig {
+public:
     float masterVolume = 1.0f;
-    float sfxVolume = 0.8f;
-    float ambientVolume = 1.0f;
+    float sfxVolume = 0.6f;
+    float ambientVolume = 0.3f;
     bool enableMovementSounds = true;
     bool enableAmbientSounds = true;
     bool enableComboSounds = true;
     bool enableLevelUpSounds = true;
+    
+    // Configuration loading
+    bool loadFromConfig(const std::string& key, const std::string& value) {
+        if (key == "MASTER_VOLUME") { masterVolume = std::clamp((float)std::atof(value.c_str()), 0.0f, 1.0f); return true; }
+        if (key == "SFX_VOLUME") { sfxVolume = std::clamp((float)std::atof(value.c_str()), 0.0f, 1.0f); return true; }
+        if (key == "AMBIENT_VOLUME") { ambientVolume = std::clamp((float)std::atof(value.c_str()), 0.0f, 1.0f); return true; }
+        if (key == "ENABLE_MOVEMENT_SOUNDS") { enableMovementSounds = (value == "1" || value == "true"); return true; }
+        if (key == "ENABLE_AMBIENT_SOUNDS") { enableAmbientSounds = (value == "1" || value == "true"); return true; }
+        if (key == "ENABLE_COMBO_SOUNDS") { enableComboSounds = (value == "1" || value == "true"); return true; }
+        if (key == "ENABLE_LEVEL_UP_SOUNDS") { enableLevelUpSounds = (value == "1" || value == "true"); return true; }
+        return false;
+    }
 };
 
 /**
@@ -357,13 +377,13 @@ public:
  */
 class AudioConfigParser : public ConfigParser {
 private:
-    AudioConfig& config_;
+    AudioConfig* config_;
     
     bool parseBool(const std::string& value) const;
     float parseFloat(const std::string& value) const;
     
 public:
-    AudioConfigParser(AudioConfig& config) : config_(config) {}
+    AudioConfigParser(AudioConfig* config) : config_(config) {}
     
     bool parse(const std::string& key, const std::string& value) override;
     std::string getCategory() const override { return "audio"; }
@@ -628,6 +648,96 @@ struct Piece {
     bool hasKicks=false;
 };
 
+// ===========================
+//   MANAGERS - FASE 1: ELIMINAR GLOBAIS
+// ===========================
+
+// Forward declaration
+static bool parseHexColor(const std::string& s, Uint8& r, Uint8& g, Uint8& b);
+
+/**
+ * @brief Theme manager
+ * 
+ * Manages visual theme configuration including colors, transparency values,
+ * and visual effect parameters.
+ */
+class ThemeManager {
+private:
+    Theme theme_;
+    
+public:
+    // Getters
+    const Theme& getTheme() const { return theme_; }
+    Theme& getTheme() { return theme_; }
+    
+    // Theme management
+    void initDefaultPieceColors() {
+        if (theme_.piece_colors.empty()) {
+            theme_.piece_colors = {
+                {220, 80, 80},  // Vermelho
+                { 80,180,120},  // Verde
+                { 80,120,220},  // Azul
+                {220,180, 80},  // Amarelo
+                {180, 80,220},  // Roxo
+                { 80,220,180},  // Ciano
+                {220,120, 80},  // Laranja
+                {160,160,160}   // Cinza
+            };
+        }
+    }
+    
+    void applyPieceColors(std::vector<Piece>& pieces) {
+        initDefaultPieceColors();
+        
+        // Aplica cores do tema APENAS para as peças que têm cor definida no CFG
+        for (size_t i = 0; i < pieces.size(); ++i) {
+            if (i < theme_.piece_colors.size()) {
+                // Usa cor do tema se disponível (CFG tem prioridade)
+                pieces[i].r = theme_.piece_colors[i].r;
+                pieces[i].g = theme_.piece_colors[i].g;
+                pieces[i].b = theme_.piece_colors[i].b;
+            } else {
+                // Para peças "extra", verifica se tem cor do arquivo
+                if (pieces[i].r == 0 && pieces[i].g == 0 && pieces[i].b == 0) {
+                    // Se a peça não tem cor definida no arquivo, usa cor padrão
+                    size_t defaultIndex = i % 8; // Cicla pelas 8 cores padrão
+                    pieces[i].r = theme_.piece_colors[defaultIndex].r;
+                    pieces[i].g = theme_.piece_colors[defaultIndex].g;
+                    pieces[i].b = theme_.piece_colors[defaultIndex].b;
+                }
+                // Se a peça já tem cor do arquivo, mantém ela (não sobrescreve)
+            }
+        }
+    }
+    
+    // Configuration loading
+    bool loadFromConfig(const std::string& key, const std::string& value) {
+        // Background colors
+        if (key == "BG") {
+            Uint8 r, g, b;
+            if (parseHexColor(value, r, g, b)) {
+                theme_.bg_r = r; theme_.bg_g = g; theme_.bg_b = b;
+                return true;
+            }
+        }
+        // Add more theme configuration loading as needed
+        return false;
+    }
+};
+
+// Global manager instances (temporary during migration)
+static GameConfig gameConfig;
+static ThemeManager themeManager;
+
+// Forward declarations for classes
+class PieceManager;
+class JoystickSystem;
+
+// Forward declarations for functions that use pieceManager
+static bool loadPiecesFromStream(std::istream& in);
+static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick);
+
+// Temporary global variables eliminated - now using PieceManager private fields
 
 static std::vector<Piece> PIECES;
 
@@ -833,36 +943,36 @@ static bool processThemeColors(const std::string& key, const std::string& val, i
     };
 
     // Cores básicas
-    if (setrgb("BG", THEME.bg_r, THEME.bg_g, THEME.bg_b)) { processedLines++; return true; }
-    if (setrgb("BOARD_EMPTY", THEME.board_empty_r, THEME.board_empty_g, THEME.board_empty_b)) { processedLines++; return true; }
-    if (setrgb("PANEL_FILL", THEME.panel_fill_r, THEME.panel_fill_g, THEME.panel_fill_b)) { processedLines++; return true; }
-    if (setrgb("PANEL_OUTLINE", THEME.panel_outline_r, THEME.panel_outline_g, THEME.panel_outline_b)) { processedLines++; return true; }
-    if (setrgb("BANNER_BG", THEME.banner_bg_r, THEME.banner_bg_g, THEME.banner_bg_b)) { processedLines++; return true; }
-    if (setrgb("BANNER_OUTLINE", THEME.banner_outline_r, THEME.banner_outline_g, THEME.banner_outline_b)) { processedLines++; return true; }
-    if (setrgb("BANNER_TEXT", THEME.banner_text_r, THEME.banner_text_g, THEME.banner_text_b)) { processedLines++; return true; }
+    if (setrgb("BG", themeManager.getTheme().bg_r, themeManager.getTheme().bg_g, themeManager.getTheme().bg_b)) { processedLines++; return true; }
+    if (setrgb("BOARD_EMPTY", themeManager.getTheme().board_empty_r, themeManager.getTheme().board_empty_g, themeManager.getTheme().board_empty_b)) { processedLines++; return true; }
+    if (setrgb("PANEL_FILL", themeManager.getTheme().panel_fill_r, themeManager.getTheme().panel_fill_g, themeManager.getTheme().panel_fill_b)) { processedLines++; return true; }
+    if (setrgb("PANEL_OUTLINE", themeManager.getTheme().panel_outline_r, themeManager.getTheme().panel_outline_g, themeManager.getTheme().panel_outline_b)) { processedLines++; return true; }
+    if (setrgb("BANNER_BG", themeManager.getTheme().banner_bg_r, themeManager.getTheme().banner_bg_g, themeManager.getTheme().banner_bg_b)) { processedLines++; return true; }
+    if (setrgb("BANNER_OUTLINE", themeManager.getTheme().banner_outline_r, themeManager.getTheme().banner_outline_g, themeManager.getTheme().banner_outline_b)) { processedLines++; return true; }
+    if (setrgb("BANNER_TEXT", themeManager.getTheme().banner_text_r, themeManager.getTheme().banner_text_g, themeManager.getTheme().banner_text_b)) { processedLines++; return true; }
 
     // Cores HUD
-    if (setrgb("HUD_LABEL", THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b)) { processedLines++; return true; }
-    if (setrgb("HUD_SCORE", THEME.hud_score_r, THEME.hud_score_g, THEME.hud_score_b)) { processedLines++; return true; }
-    if (setrgb("HUD_LINES", THEME.hud_lines_r, THEME.hud_lines_g, THEME.hud_lines_b)) { processedLines++; return true; }
-    if (setrgb("HUD_LEVEL", THEME.hud_level_r, THEME.hud_level_g, THEME.hud_level_b)) { processedLines++; return true; }
+    if (setrgb("HUD_LABEL", themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b)) { processedLines++; return true; }
+    if (setrgb("HUD_SCORE", themeManager.getTheme().hud_score_r, themeManager.getTheme().hud_score_g, themeManager.getTheme().hud_score_b)) { processedLines++; return true; }
+    if (setrgb("HUD_LINES", themeManager.getTheme().hud_lines_r, themeManager.getTheme().hud_lines_g, themeManager.getTheme().hud_lines_b)) { processedLines++; return true; }
+    if (setrgb("HUD_LEVEL", themeManager.getTheme().hud_level_r, themeManager.getTheme().hud_level_g, themeManager.getTheme().hud_level_b)) { processedLines++; return true; }
 
     // Cores NEXT
-    if (setrgb("NEXT_FILL", THEME.next_fill_r, THEME.next_fill_g, THEME.next_fill_b)) { processedLines++; return true; }
-    if (setrgb("NEXT_OUTLINE", THEME.next_outline_r, THEME.next_outline_g, THEME.next_outline_b)) { processedLines++; return true; }
-    if (setrgb("NEXT_LABEL", THEME.next_label_r, THEME.next_label_g, THEME.next_label_b)) { processedLines++; return true; }
+    if (setrgb("NEXT_FILL", themeManager.getTheme().next_fill_r, themeManager.getTheme().next_fill_g, themeManager.getTheme().next_fill_b)) { processedLines++; return true; }
+    if (setrgb("NEXT_OUTLINE", themeManager.getTheme().next_outline_r, themeManager.getTheme().next_outline_g, themeManager.getTheme().next_outline_b)) { processedLines++; return true; }
+    if (setrgb("NEXT_LABEL", themeManager.getTheme().next_label_r, themeManager.getTheme().next_label_g, themeManager.getTheme().next_label_b)) { processedLines++; return true; }
 
     // Cores OVERLAY
-    if (setrgb("OVERLAY_FILL", THEME.overlay_fill_r, THEME.overlay_fill_g, THEME.overlay_fill_b)) { processedLines++; return true; }
-    if (setrgb("OVERLAY_OUTLINE", THEME.overlay_outline_r, THEME.overlay_outline_g, THEME.overlay_outline_b)) { processedLines++; return true; }
-    if (setrgb("OVERLAY_TOP", THEME.overlay_top_r, THEME.overlay_top_g, THEME.overlay_top_b)) { processedLines++; return true; }
-    if (setrgb("OVERLAY_SUB", THEME.overlay_sub_r, THEME.overlay_sub_g, THEME.overlay_sub_b)) { processedLines++; return true; }
+    if (setrgb("OVERLAY_FILL", themeManager.getTheme().overlay_fill_r, themeManager.getTheme().overlay_fill_g, themeManager.getTheme().overlay_fill_b)) { processedLines++; return true; }
+    if (setrgb("OVERLAY_OUTLINE", themeManager.getTheme().overlay_outline_r, themeManager.getTheme().overlay_outline_g, themeManager.getTheme().overlay_outline_b)) { processedLines++; return true; }
+    if (setrgb("OVERLAY_TOP", themeManager.getTheme().overlay_top_r, themeManager.getTheme().overlay_top_g, themeManager.getTheme().overlay_top_b)) { processedLines++; return true; }
+    if (setrgb("OVERLAY_SUB", themeManager.getTheme().overlay_sub_r, themeManager.getTheme().overlay_sub_g, themeManager.getTheme().overlay_sub_b)) { processedLines++; return true; }
 
     // Alpha values
-    if (seta("PANEL_OUTLINE_A", THEME.panel_outline_a)) { processedLines++; return true; }
-    if (seta("NEXT_OUTLINE_A", THEME.next_outline_a)) { processedLines++; return true; }
-    if (seta("OVERLAY_FILL_A", THEME.overlay_fill_a)) { processedLines++; return true; }
-    if (seta("OVERLAY_OUTLINE_A", THEME.overlay_outline_a)) { processedLines++; return true; }
+    if (seta("PANEL_OUTLINE_A", themeManager.getTheme().panel_outline_a)) { processedLines++; return true; }
+    if (seta("NEXT_OUTLINE_A", themeManager.getTheme().next_outline_a)) { processedLines++; return true; }
+    if (seta("OVERLAY_FILL_A", themeManager.getTheme().overlay_fill_a)) { processedLines++; return true; }
+    if (seta("OVERLAY_OUTLINE_A", themeManager.getTheme().overlay_outline_a)) { processedLines++; return true; }
 
     return false;
 }
@@ -881,12 +991,12 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
     
     // Grid colors
     if (key == "NEXT_GRID_DARK") { 
-        *(int*)&THEME.next_grid_dark = std::atoi(val.c_str()); 
+        *(int*)&themeManager.getTheme().next_grid_dark = std::atoi(val.c_str()); 
         processedLines++; 
         return true; 
     }
     if (key == "NEXT_GRID_LIGHT") { 
-        *(int*)&THEME.next_grid_light = std::atoi(val.c_str()); 
+        *(int*)&themeManager.getTheme().next_grid_light = std::atoi(val.c_str()); 
         processedLines++; 
         return true; 
     }
@@ -895,8 +1005,8 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
     if (key == "NEXT_GRID_DARK_COLOR") {
         Uint8 r, g, b;
         if (parseHexColor(val, r, g, b)) {
-            THEME.next_grid_dark_r = r; THEME.next_grid_dark_g = g; THEME.next_grid_dark_b = b;
-            THEME.next_grid_use_rgb = true;
+            themeManager.getTheme().next_grid_dark_r = r; themeManager.getTheme().next_grid_dark_g = g; themeManager.getTheme().next_grid_dark_b = b;
+            themeManager.getTheme().next_grid_use_rgb = true;
             processedLines++;
         }
         return true;
@@ -904,8 +1014,8 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
     if (key == "NEXT_GRID_LIGHT_COLOR") {
         Uint8 r, g, b;
         if (parseHexColor(val, r, g, b)) {
-            THEME.next_grid_light_r = r; THEME.next_grid_light_g = g; THEME.next_grid_light_b = b;
-            THEME.next_grid_use_rgb = true;
+            themeManager.getTheme().next_grid_light_r = r; themeManager.getTheme().next_grid_light_g = g; themeManager.getTheme().next_grid_light_b = b;
+            themeManager.getTheme().next_grid_use_rgb = true;
             processedLines++;
         }
         return true;
@@ -923,10 +1033,10 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
         
         Uint8 r, g, b;
         if (parseHexColor(val, r, g, b)) {
-            if (pieceIndex >= (int)THEME.piece_colors.size()) {
-                THEME.piece_colors.resize(pieceIndex + 1, {200, 200, 200});
+            if (pieceIndex >= (int)themeManager.getTheme().piece_colors.size()) {
+                themeManager.getTheme().piece_colors.resize(pieceIndex + 1, {200, 200, 200});
             }
-            THEME.piece_colors[pieceIndex] = {r, g, b};
+            themeManager.getTheme().piece_colors[pieceIndex] = {r, g, b};
             processedLines++;
         }
         return true;
@@ -936,7 +1046,6 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
 }
 
 static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickSystem& joystick) {
-    DebugLogger::debug("loadConfigFromStream - Starting to parse config stream");
     
     std::string line;
     int lineNum = 0;
@@ -985,19 +1094,14 @@ static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickS
         skippedLines++;
     }
     
-    DebugLogger::debug("loadConfigFromStream - Finished parsing. Processed: " + std::to_string(processedLines) + ", Skipped: " + std::to_string(skippedLines));
 }
 static bool loadConfigPath(const std::string& p, AudioSystem& audio, JoystickSystem& joystick){
-    DebugLogger::debug("loadConfigPath - Attempting to load: " + p);
     
     std::ifstream f(p.c_str()); 
     if(f.good()){ 
-        DebugLogger::debug("loadConfigPath - File opened successfully, loading from stream");
-        loadConfigFromStream(f, audio, joystick); 
-        DebugLogger::debug("loadConfigPath - Config loaded successfully from stream");
+        loadConfigFromStream(f, audio, joystick);
         return true; 
     } 
-    DebugLogger::debug("loadConfigPath - File not found or not good: " + p);
     return false;
 }
 /**
@@ -1012,15 +1116,12 @@ static bool loadConfigPath(const std::string& p, AudioSystem& audio, JoystickSys
  * @param audio Audio system reference for audio configuration
  */
 static void loadConfigFile(AudioSystem& audio, JoystickSystem& joystick){
-    DebugLogger::debug("loadConfigFile - Step 1: Checking DROPBLOCKS_CFG env var");
     
     if(const char* env = std::getenv("DROPBLOCKS_CFG")){ 
-        DebugLogger::debug("loadConfigFile - Found DROPBLOCKS_CFG: " + std::string(env));
         if(loadConfigPath(env, audio, joystick)) { 
             DebugLogger::info("Config carregado de: " + std::string(env)); 
             return; 
         } 
-        DebugLogger::debug("loadConfigFile - Failed to load from DROPBLOCKS_CFG");
     }
     if(loadConfigPath("default.cfg", audio, joystick)) { 
         DebugLogger::info("Config carregado de: default.cfg"); 
@@ -1199,96 +1300,7 @@ static bool processPieceProperty(Piece& cur, const std::string& key, const std::
     return false;
 }
 
-static bool loadPiecesFromStream(std::istream& in) {
-    PIECES.clear(); 
-    RAND_TYPE = RandType::SIMPLE; 
-    RAND_BAG_SIZE = 0;
-
-    std::string line, section;
-    Piece cur; 
-    bool inPiece = false; 
-    bool rotExplicit = false;
-    std::vector<std::pair<int,int>> rot0, rot1, rot2, rot3, base;
-
-    auto flushPiece = [&]() {
-        if (!inPiece) return;
-        
-        buildPieceRotations(cur, base, rot0, rot1, rot2, rot3, rotExplicit);
-        
-        if (!cur.rot.empty()) {
-            PIECES.push_back(cur);
-        }
-        
-        cur = Piece{}; 
-        rotExplicit = false; 
-        rot0.clear(); rot1.clear(); rot2.clear(); rot3.clear(); base.clear(); 
-        inPiece = false;
-    };
-
-    while (std::getline(in, line)) {
-        line = parsePiecesLine(line);
-        trim(line); 
-        if (line.empty()) continue;
-
-        if (line.front() == '[' && line.back() == ']') {
-            std::string sec = line.substr(1, line.size() - 2);
-            std::string SEC = sec; 
-            for (char& c : SEC) c = (char)std::toupper((unsigned char)c);
-            
-            if (SEC.rfind("PIECE.", 0) == 0) {
-                flushPiece(); 
-                inPiece = true; 
-                cur = Piece{}; 
-                rotExplicit = false;
-                rot0.clear(); rot1.clear(); rot2.clear(); rot3.clear(); base.clear();
-                cur.name = sec.substr(6);
-            } else {
-                flushPiece(); 
-                inPiece = false; 
-                section = SEC;
-            }
-            continue;
-        }
-
-        size_t eq = line.find('='); 
-        if (eq == std::string::npos) continue;
-        
-        std::string k = line.substr(0, eq), v = line.substr(eq + 1); 
-        trim(k); trim(v);
-        std::string K = k; 
-        for (char& c : K) c = (char)std::toupper((unsigned char)c);
-
-        if (inPiece) {
-            if (processPieceProperty(cur, K, v, base, rot0, rot1, rot2, rot3, rotExplicit)) {
-                continue;
-            }
-        } else {
-            if (section == "SET") {
-                if (K == "NAME") { /* opcional */ continue; }
-                if (K == "PREVIEWGRID" || K == "PREVIEW_GRID") { 
-                    int n; 
-                    if (parseInt(v, n) && n > 0 && n <= 10) PREVIEW_GRID = n; 
-                    continue; 
-                }
-            }
-            if (section == "RANDOMIZER") {
-                if (K == "TYPE") { 
-                    std::string vv = v; 
-                    for (char& c : vv) c = (char)std::tolower((unsigned char)c);
-                    RAND_TYPE = (vv == "bag" ? RandType::BAG : RandType::SIMPLE); 
-                    continue; 
-                }
-                if (K == "BAGSIZE") { 
-                    int n; 
-                    if (parseInt(v, n) && n >= 0) RAND_BAG_SIZE = n; 
-                    continue; 
-                }
-            }
-        }
-    }
-    flushPiece();
-    return !PIECES.empty();
-}
+// loadPiecesFromStream moved after pieceManager definition
 
 static bool loadPiecesPath(const std::string& p){
     std::ifstream f(p.c_str()); 
@@ -1310,42 +1322,12 @@ static bool loadPiecesPath(const std::string& p){
  * 
  * @return true if pieces loaded successfully, false otherwise
  */
-static bool loadPiecesFile(){
-    if(const char* env = std::getenv("DROPBLOCKS_PIECES")) {
-        if(loadPiecesPath(env)) return true;
-    }
-    if(!PIECES_FILE_PATH.empty()) {
-        if(loadPiecesPath(PIECES_FILE_PATH)) return true;
-    }
-    if(loadPiecesPath("default.pieces")) return true;
-    if(const char* home = std::getenv("HOME")){
-        std::string p = std::string(home) + "/.config/default.pieces";
-        if(loadPiecesPath(p)) return true;
-    }
-    return false;
-}
-
-static void seedPiecesFallback(){
-    SDL_Log("Usando fallback interno de peças.");
-    PIECES.clear();
-    auto mk = [](std::initializer_list<std::pair<int,int>> c, Uint8 r, Uint8 g, Uint8 b){
-        Piece p; p.r=r; p.g=g; p.b=b;
-        std::vector<std::pair<int,int>> base(c);
-        std::vector<std::pair<int,int>> r0=base, r1=base, r2=base, r3=base;
-        rotate90(r1); r2=r1; rotate90(r2); r3=r2; rotate90(r3);
-        p.rot={r0,r1,r2,r3}; return p;
-    };
-    PIECES.push_back(mk({{0,0},{1,0},{0,1},{-1,0}}, 220,80,80));
-    PIECES.push_back(mk({{0,0},{1,0},{-1,0},{-1,1}}, 80,180,120));
-    PIECES.push_back(mk({{0,0},{1,0},{0,1},{0,2}},   80,120,220));
-    PIECES.push_back(mk({{0,0},{1,0},{-1,0},{0,1},{1,1}}, 220,160,80));
-    PIECES.push_back(mk({{0,0},{0,1},{1,1},{-1,0}}, 160,80,220));
-}
+// Funções movidas para depois da declaração do pieceManager
 
 static void initDefaultPieceColors(){
     // Se não há cores definidas, inicializa com cores padrão
-    if(THEME.piece_colors.empty()){
-        THEME.piece_colors = {
+    if(themeManager.getTheme().piece_colors.empty()){
+        themeManager.getTheme().piece_colors = {
             {220, 80, 80},  // Vermelho
             { 80,180,120},  // Verde
             { 80,120,220},  // Azul
@@ -1361,27 +1343,7 @@ static void initDefaultPieceColors(){
 }
 
 static void applyThemePieceColors(){
-    initDefaultPieceColors();
-    
-    // Aplica cores do tema APENAS para as peças que têm cor definida no CFG
-    for (size_t i=0; i<PIECES.size(); ++i){
-        if(i < THEME.piece_colors.size()) {
-            // Usa cor do tema se disponível (CFG tem prioridade)
-            PIECES[i].r = THEME.piece_colors[i].r;
-            PIECES[i].g = THEME.piece_colors[i].g;
-            PIECES[i].b = THEME.piece_colors[i].b;
-        } else {
-            // Para peças "extra", verifica se tem cor do arquivo
-            if(PIECES[i].r == 0 && PIECES[i].g == 0 && PIECES[i].b == 0) {
-                // Se a peça não tem cor definida no arquivo, usa cor padrão
-                size_t defaultIndex = i % 8; // Cicla pelas 8 cores padrão
-                PIECES[i].r = THEME.piece_colors[defaultIndex].r;
-                PIECES[i].g = THEME.piece_colors[defaultIndex].g;
-                PIECES[i].b = THEME.piece_colors[defaultIndex].b;
-            }
-            // Se a peça já tem cor do arquivo, mantém ela (não sobrescreve)
-        }
-    }
+    themeManager.applyPieceColors(PIECES);
 }
 
 // ===========================
@@ -1577,15 +1539,279 @@ static bool saveScreenshot(SDL_Renderer* ren, const char* path) {
 }
 
 // ===========================
-//   SISTEMA DE ÁUDIO
+//   SISTEMA DE ÁUDIO MODULAR
 // ===========================
 
-// Estrutura para sistema de áudio expandido
-struct AudioSystem {
-    SDL_AudioDeviceID device = 0;
-    SDL_AudioSpec spec;
+/**
+ * @brief Audio hardware management and basic synthesis
+ * 
+ * Handles SDL audio device initialization, cleanup, and basic sound generation
+ */
+class AudioDevice {
+private:
+    SDL_AudioDeviceID device_ = 0;
+    SDL_AudioSpec spec_;
     
-    // Configurações de áudio
+public:
+    AudioDevice() = default;
+    
+    bool initialize() {
+        spec_.freq = 44100; 
+        spec_.format = AUDIO_F32SYS; 
+        spec_.channels = 1; 
+        spec_.samples = 1024;
+        device_ = SDL_OpenAudioDevice(nullptr, 0, &spec_, &spec_, 0);
+        if (device_) SDL_PauseAudioDevice(device_, 0);
+        return device_ != 0;
+    }
+    
+    void cleanup() {
+        if (device_) SDL_CloseAudioDevice(device_);
+        device_ = 0;
+    }
+    
+    bool isInitialized() const { return device_ != 0; }
+    const SDL_AudioSpec& getSpec() const { return spec_; }
+    
+    void playBeep(double freq, int ms, float vol = 0.25f, bool square = true) {
+        if (!device_) return;
+        int N = (int)(spec_.freq * (ms / 1000.0));
+        std::vector<float> buf(N);
+        double ph = 0, st = 2.0 * M_PI * freq / spec_.freq;
+        for (int i = 0; i < N; i++) {
+            float s = square ? (std::sin(ph) >= 0 ? 1.f : -1.f) : (float)std::sin(ph);
+            buf[i] = s * vol; 
+            ph += st; 
+            if (ph > 2 * M_PI) ph -= 2 * M_PI;
+        }
+        SDL_QueueAudio(device_, buf.data(), (Uint32)(buf.size() * sizeof(float)));
+    }
+    
+    void playChord(double baseFreq, int notes[], int count, int ms, float vol = 0.15f) {
+        if (!device_) return;
+        for (int i = 0; i < count; i++) {
+            playBeep(baseFreq * notes[i], ms, vol, false);
+        }
+    }
+    
+    void playArpeggio(double baseFreq, int notes[], int count, int noteMs, float vol = 0.12f) {
+        if (!device_) return;
+        for (int i = 0; i < count; i++) {
+            playBeep(baseFreq * notes[i], noteMs, vol, false);
+        }
+    }
+    
+    void playSweep(double startFreq, double endFreq, int ms, float vol = 0.10f) {
+        if (!device_) return;
+        int steps = 20;
+        for (int i = 0; i <= steps; i++) {
+            double freq = startFreq + (endFreq - startFreq) * (i / (double)steps);
+            playBeep(freq, ms / steps, vol, false);
+        }
+    }
+};
+
+// AudioConfig definition moved to earlier in file
+
+/**
+ * @brief Game-specific sound effects
+ * 
+ * Handles all game-specific sound effects and ambient sounds
+ */
+class SoundEffects {
+private:
+    AudioDevice* device_;
+    AudioConfig* config_;
+    
+    // Timing for ambient sounds
+    Uint32 lastSweepSound_ = 0;
+    Uint32 lastScanlineSound_ = 0;
+    Uint32 lastMelody_ = 0;
+    Uint32 lastTension_ = 0;
+    
+public:
+    SoundEffects(AudioDevice* device, AudioConfig* config) 
+        : device_(device), config_(config) {}
+    
+    // Movement sounds
+    void playMovementSound() {
+        if (config_->enableMovementSounds) {
+            device_->playBeep(150.0, 8, 0.06f * config_->masterVolume, true);
+        }
+    }
+    
+    void playRotationSound(bool cw = true) {
+        if (config_->enableMovementSounds) {
+            device_->playBeep(cw ? 350.0 : 300.0, 15, 0.10f * config_->masterVolume, false);
+        }
+    }
+    
+    void playSoftDropSound() {
+        if (config_->enableMovementSounds) {
+            device_->playBeep(200.0, 12, 0.08f * config_->masterVolume, true);
+        }
+    }
+    
+    void playHardDropSound() {
+        if (config_->enableMovementSounds) {
+            device_->playBeep(400.0, 20, 0.12f * config_->masterVolume, true);
+        }
+    }
+    
+    void playKickSound() {
+        if (config_->enableMovementSounds) {
+            device_->playBeep(250.0, 15, 0.08f * config_->masterVolume, true);
+        }
+    }
+    
+    // Game state sounds
+    void playLevelUpSound() {
+        if (config_->enableLevelUpSounds) {
+            float vol = 0.25f * config_->masterVolume;
+            device_->playBeep(880.0, 100, vol, false);
+            device_->playBeep(1320.0, 80, vol * 0.8f, false);
+        }
+    }
+    
+    void playGameOverSound() {
+        if (config_->enableLevelUpSounds) {
+            float vol = 0.3f * config_->masterVolume;
+            device_->playBeep(440.0, 200, vol, false);
+            device_->playBeep(392.0, 200, vol, false);
+            device_->playBeep(349.0, 200, vol, false);
+            device_->playBeep(294.0, 300, vol * 1.33f, false);
+        }
+    }
+    
+    void playComboSound(int combo) {
+        if (config_->enableComboSounds && combo > 1) {
+            double freq = 440.0 + (combo * 50.0);
+            float vol = (0.15f + combo * 0.02f) * config_->masterVolume * config_->sfxVolume;
+            device_->playBeep(freq, 100 + combo * 20, vol, true);
+        }
+    }
+    
+    void playTetrisSound() {
+        if (config_->enableComboSounds) {
+            int notes[] = {1, 5, 8, 12}; // C, E, G, C (oitava)
+            float vol = 0.20f * config_->masterVolume * config_->sfxVolume;
+            device_->playArpeggio(220.0, notes, 4, 50, vol);
+        }
+    }
+    
+    // Ambient sounds
+    void playBackgroundMelody(int level) {
+        if (!config_->enableAmbientSounds) return;
+        Uint32 now = SDL_GetTicks();
+        if (now - lastMelody_ > 3000) {  // A cada 3 segundos
+            double baseFreq = 220.0 + (level * 20.0);
+            double melody[] = {1.0, 1.25, 1.5, 1.875, 2.0};  // Pentatônica
+            
+            for (int i = 0; i < 3; i++) {
+                double freq = baseFreq * melody[i % 5];
+                float vol = 0.05f * config_->ambientVolume * config_->masterVolume;
+                device_->playBeep(freq, 200, vol, false);
+            }
+            lastMelody_ = now;
+        }
+    }
+    
+    void playTensionSound(int filledRows) {
+        if (!config_->enableAmbientSounds || filledRows < 5) return;
+        Uint32 now = SDL_GetTicks();
+        if (now - lastTension_ > 1000) {
+            float vol = 0.08f * config_->ambientVolume * config_->masterVolume;
+            device_->playBeep(80.0, 300, vol, true);
+            lastTension_ = now;
+        }
+    }
+    
+    void playSweepEffect() {
+        if (!config_->enableAmbientSounds) return;
+        Uint32 now = SDL_GetTicks();
+        if (now - lastSweepSound_ > 2000) {  // A cada 2 segundos
+            float vol = 0.03f * config_->ambientVolume * config_->masterVolume;
+            device_->playBeep(50.0, 100, vol, false);
+            lastSweepSound_ = now;
+        }
+    }
+    
+    void playScanlineEffect() {
+        if (!config_->enableAmbientSounds) return;
+        Uint32 now = SDL_GetTicks();
+        if (now - lastScanlineSound_ > 5000) {  // A cada 5 segundos
+            float vol = 0.02f * config_->ambientVolume * config_->masterVolume;
+            device_->playBeep(15.0, 200, vol, true);
+            lastScanlineSound_ = now;
+        }
+    }
+};
+
+/**
+ * @brief Main audio system coordinator
+ * 
+ * Coordinates AudioDevice, AudioConfig, and SoundEffects
+ */
+struct AudioSystem {
+private:
+    AudioDevice device_;
+    AudioConfig config_;
+    SoundEffects effects_;
+    
+public:
+    AudioSystem() : effects_(&device_, &config_) {}
+    
+    // Initialization and cleanup
+    bool initialize() {
+        return device_.initialize();
+    }
+    
+    void cleanup() {
+        device_.cleanup();
+    }
+    
+    // Configuration
+    AudioConfig& getConfig() { return config_; }
+    const AudioConfig& getConfig() const { return config_; }
+    
+    // Basic synthesis (delegated to device)
+    void playBeep(double freq, int ms, float vol = 0.25f, bool square = true) {
+        device_.playBeep(freq, ms, vol * config_.masterVolume, square);
+    }
+    
+    void playChord(double baseFreq, int notes[], int count, int ms, float vol = 0.15f) {
+        device_.playChord(baseFreq, notes, count, ms, vol * config_.masterVolume * config_.sfxVolume);
+    }
+    
+    void playArpeggio(double baseFreq, int notes[], int count, int noteMs, float vol = 0.12f) {
+        device_.playArpeggio(baseFreq, notes, count, noteMs, vol * config_.masterVolume * config_.sfxVolume);
+    }
+    
+    void playSweep(double startFreq, double endFreq, int ms, float vol = 0.10f) {
+        device_.playSweep(startFreq, endFreq, ms, vol * config_.masterVolume * config_.sfxVolume);
+    }
+    
+    // Game-specific sounds (delegated to effects)
+    void playMovementSound() { effects_.playMovementSound(); }
+    void playRotationSound(bool cw = true) { effects_.playRotationSound(cw); }
+    void playSoftDropSound() { effects_.playSoftDropSound(); }
+    void playHardDropSound() { effects_.playHardDropSound(); }
+    void playKickSound() { effects_.playKickSound(); }
+    void playLevelUpSound() { effects_.playLevelUpSound(); }
+    void playGameOverSound() { effects_.playGameOverSound(); }
+    void playComboSound(int combo) { effects_.playComboSound(combo); }
+    void playTetrisSound() { effects_.playTetrisSound(); }
+    void playBackgroundMelody(int level) { effects_.playBackgroundMelody(level); }
+    void playTensionSound(int filledRows) { effects_.playTensionSound(filledRows); }
+    void playSweepEffect() { effects_.playSweepEffect(); }
+    void playScanlineEffect() { effects_.playScanlineEffect(); }
+    
+    // Configuration loading (delegated to config)
+    bool loadFromConfig(const std::string& key, const std::string& value) {
+        return config_.loadFromConfig(key, value);
+    }
+    
+    // Legacy compatibility - direct access to old fields
     float masterVolume = 1.0f;
     float sfxVolume = 0.6f;
     float ambientVolume = 0.3f;
@@ -1593,162 +1819,6 @@ struct AudioSystem {
     bool enableAmbientSounds = true;
     bool enableComboSounds = true;
     bool enableLevelUpSounds = true;
-    
-    // Estado para sons ambientais
-    Uint32 lastSweepSound = 0;
-    Uint32 lastScanlineSound = 0;
-    Uint32 lastMelody = 0;
-    Uint32 lastTension = 0;
-    
-    bool initialize() {
-        spec.freq = 44100; 
-        spec.format = AUDIO_F32SYS; 
-        spec.channels = 1; 
-        spec.samples = 1024;
-        device = SDL_OpenAudioDevice(nullptr, 0, &spec, &spec, 0);
-        if (device) SDL_PauseAudioDevice(device, 0);
-        return device != 0;
-    }
-    
-    void playBeep(double freq, int ms, float vol = 0.25f, bool square = true) {
-        if (!device) return;
-        int N = (int)(spec.freq * (ms / 1000.0));
-        std::vector<float> buf(N);
-        double ph = 0, st = 2.0 * M_PI * freq / spec.freq;
-        for (int i = 0; i < N; i++) {
-            float s = square ? (std::sin(ph) >= 0 ? 1.f : -1.f) : (float)std::sin(ph);
-            buf[i] = s * vol * masterVolume; 
-            ph += st; 
-            if (ph > 2 * M_PI) ph -= 2 * M_PI;
-        }
-        SDL_QueueAudio(device, buf.data(), (Uint32)(buf.size() * sizeof(float)));
-    }
-    
-    // Novos métodos de síntese
-    void playChord(double baseFreq, int notes[], int count, int ms, float vol = 0.15f) {
-        if (!device) return;
-        vol *= masterVolume * sfxVolume;
-        for (int i = 0; i < count; i++) {
-            playBeep(baseFreq * notes[i], ms, vol, false);
-        }
-    }
-    
-    void playArpeggio(double baseFreq, int notes[], int count, int noteMs, float vol = 0.12f) {
-        if (!device) return;
-        vol *= masterVolume * sfxVolume;
-        for (int i = 0; i < count; i++) {
-            playBeep(baseFreq * notes[i], noteMs, vol, false);
-            // Não usar SDL_Delay aqui para não bloquear o thread principal
-        }
-    }
-    
-    void playSweep(double startFreq, double endFreq, int ms, float vol = 0.10f) {
-        if (!device) return;
-        vol *= masterVolume * sfxVolume;
-        int steps = 20;
-        for (int i = 0; i <= steps; i++) {
-            double freq = startFreq + (endFreq - startFreq) * (i / (double)steps);
-            playBeep(freq, ms / steps, vol, false);
-        }
-    }
-    
-    // Sons específicos do jogo
-    void playMovementSound() {
-        if (enableMovementSounds) playBeep(150.0, 8, 0.06f, true);
-    }
-    
-    void playRotationSound(bool cw = true) {
-        if (enableMovementSounds) playBeep(cw ? 350.0 : 300.0, 15, 0.10f, false);
-    }
-    
-    void playSoftDropSound() {
-        if (enableMovementSounds) playBeep(200.0, 12, 0.08f, true);
-    }
-    
-    void playHardDropSound() {
-        if (enableMovementSounds) playBeep(400.0, 20, 0.12f, true);
-    }
-    
-    void playKickSound() {
-        if (enableMovementSounds) playBeep(250.0, 15, 0.08f, true);
-    }
-    
-    void playLevelUpSound() {
-        if (enableLevelUpSounds) {
-            playBeep(880.0, 100, 0.25f, false);
-            playBeep(1320.0, 80, 0.20f, false);
-        }
-    }
-    
-    void playGameOverSound() {
-        if (enableLevelUpSounds) {
-            // Sequência icônica de game over - descendente e dramática
-            playBeep(440.0, 200, 0.3f, false);  // A4
-            playBeep(392.0, 200, 0.3f, false);  // G4
-            playBeep(349.0, 200, 0.3f, false);  // F4
-            playBeep(294.0, 300, 0.4f, false);  // D4 (mais longo)
-        }
-    }
-    
-    void playComboSound(int combo) {
-        if (enableComboSounds && combo > 1) {
-            double freq = 440.0 + (combo * 50.0);
-            playBeep(freq, 100 + combo * 20, 0.15f + combo * 0.02f, true);
-        }
-    }
-    
-    void playTetrisSound() {
-        if (enableComboSounds) {
-            int notes[] = {1, 5, 8, 12}; // C, E, G, C (oitava)
-            playArpeggio(220.0, notes, 4, 50, 0.20f);  // Mais rápido
-        }
-    }
-    
-    void playBackgroundMelody(int level) {
-        if (!enableAmbientSounds) return;
-        Uint32 now = SDL_GetTicks();
-        if (now - lastMelody > 3000) {  // A cada 3 segundos
-            double baseFreq = 220.0 + (level * 20.0);
-            double melody[] = {1.0, 1.25, 1.5, 1.875, 2.0};  // Pentatônica
-            
-            for (int i = 0; i < 3; i++) {
-                double freq = baseFreq * melody[i % 5];
-                playBeep(freq, 200, 0.05f * ambientVolume, false);
-            }
-            lastMelody = now;
-        }
-    }
-    
-    void playTensionSound(int filledRows) {
-        if (!enableAmbientSounds || filledRows < 5) return;
-        Uint32 now = SDL_GetTicks();
-        if (now - lastTension > 1000) {
-            playBeep(80.0, 300, 0.08f * ambientVolume, true);
-            lastTension = now;
-        }
-    }
-    
-    void playSweepEffect() {
-        if (!enableAmbientSounds) return;
-        Uint32 now = SDL_GetTicks();
-        if (now - lastSweepSound > 2000) {  // A cada 2 segundos
-            playBeep(50.0, 100, 0.03f * ambientVolume, false);
-            lastSweepSound = now;
-        }
-    }
-    
-    void playScanlineEffect() {
-        if (!enableAmbientSounds) return;
-        Uint32 now = SDL_GetTicks();
-        if (now - lastScanlineSound > 5000) {  // A cada 5 segundos
-            playBeep(15.0, 200, 0.02f * ambientVolume, true);
-            lastScanlineSound = now;
-        }
-    }
-    
-    void cleanup() {
-        if (device) SDL_CloseAudioDevice(device);
-    }
 };
 
 // ===========================
@@ -1774,7 +1844,6 @@ bool VisualConfigParser::parseHexColor(const std::string& value, RGB& color) con
     std::string hex = value;
     if (hex[0] == '#') hex = hex.substr(1);
     if (hex.length() != 6) {
-        DebugLogger::debug("parseHexColor failed: invalid length for " + value + " (length=" + std::to_string(hex.length()) + ")");
         return false;
     }
     
@@ -1782,16 +1851,13 @@ bool VisualConfigParser::parseHexColor(const std::string& value, RGB& color) con
         color.r = (Uint8)std::stoi(hex.substr(0, 2), nullptr, 16);
         color.g = (Uint8)std::stoi(hex.substr(2, 2), nullptr, 16);
         color.b = (Uint8)std::stoi(hex.substr(4, 2), nullptr, 16);
-        DebugLogger::debug("parseHexColor success: " + value + " -> R=" + std::to_string(color.r) + " G=" + std::to_string(color.g) + " B=" + std::to_string(color.b));
         return true;
     } catch (...) {
-        DebugLogger::debug("parseHexColor failed: exception parsing " + value);
         return false;
     }
 }
 
 bool VisualConfigParser::parse(const std::string& key, const std::string& value) {
-    DebugLogger::debug("VisualConfigParser::parse called with key=" + key + " value=" + value);
     
     // Colors
     if (key == "BG") return parseHexColor(value, config_.colors.background);
@@ -1884,21 +1950,23 @@ float AudioConfigParser::parseFloat(const std::string& value) const {
 }
 
 bool AudioConfigParser::parse(const std::string& key, const std::string& value) {
-    if (key == "AUDIO_MASTER_VOLUME") { config_.masterVolume = parseFloat(value); return true; }
-    if (key == "AUDIO_SFX_VOLUME") { config_.sfxVolume = parseFloat(value); return true; }
-    if (key == "AUDIO_AMBIENT_VOLUME") { config_.ambientVolume = parseFloat(value); return true; }
-    if (key == "ENABLE_MOVEMENT_SOUNDS") { config_.enableMovementSounds = parseBool(value); return true; }
-    if (key == "ENABLE_AMBIENT_SOUNDS") { config_.enableAmbientSounds = parseBool(value); return true; }
-    if (key == "ENABLE_COMBO_SOUNDS") { config_.enableComboSounds = parseBool(value); return true; }
-    if (key == "ENABLE_LEVEL_UP_SOUNDS") { config_.enableLevelUpSounds = parseBool(value); return true; }
+    if (!config_) return false;
+    if (key == "AUDIO_MASTER_VOLUME") { config_->masterVolume = parseFloat(value); return true; }
+    if (key == "AUDIO_SFX_VOLUME") { config_->sfxVolume = parseFloat(value); return true; }
+    if (key == "AUDIO_AMBIENT_VOLUME") { config_->ambientVolume = parseFloat(value); return true; }
+    if (key == "ENABLE_MOVEMENT_SOUNDS") { config_->enableMovementSounds = parseBool(value); return true; }
+    if (key == "ENABLE_AMBIENT_SOUNDS") { config_->enableAmbientSounds = parseBool(value); return true; }
+    if (key == "ENABLE_COMBO_SOUNDS") { config_->enableComboSounds = parseBool(value); return true; }
+    if (key == "ENABLE_LEVEL_UP_SOUNDS") { config_->enableLevelUpSounds = parseBool(value); return true; }
     
     return false;
 }
 
 bool AudioConfigParser::validate() const {
-    return (config_.masterVolume >= 0.0f && config_.masterVolume <= 1.0f) &&
-           (config_.sfxVolume >= 0.0f && config_.sfxVolume <= 1.0f) &&
-           (config_.ambientVolume >= 0.0f && config_.ambientVolume <= 1.0f);
+    if (!config_) return false;
+    return (config_->masterVolume >= 0.0f && config_->masterVolume <= 1.0f) &&
+           (config_->sfxVolume >= 0.0f && config_->sfxVolume <= 1.0f) &&
+           (config_->ambientVolume >= 0.0f && config_->ambientVolume <= 1.0f);
 }
 
 // Implementação do InputConfigParser
@@ -2052,7 +2120,7 @@ bool ConfigManager::loadFromFile(const std::string& path) {
     
     // Create parsers
     VisualConfigParser visualParser(visual_);
-    AudioConfigParser audioParser(audio_);
+    AudioConfigParser audioParser(&audio_);
     InputConfigParser inputParser(input_);
     PiecesConfigParser piecesParser(pieces_);
     GameConfigParser gameParser(game_);
@@ -2067,7 +2135,6 @@ bool ConfigManager::loadFromFile(const std::string& path) {
     while (std::getline(file, line)) {
         lineNum++;
         
-        DebugLogger::debug("Reading line " + std::to_string(lineNum) + ": '" + line + "'");
         
         // Parse line (remove comments) - but only if # is at the beginning of the line or after whitespace
         size_t commentPos = line.find('#');
@@ -2104,13 +2171,11 @@ bool ConfigManager::loadFromFile(const std::string& path) {
         std::string key = line.substr(0, eq);
         std::string value = line.substr(eq + 1);
         
-        DebugLogger::debug("Raw parsing - key='" + key + "' value='" + value + "'");
         
         // Trim key and value
         trim(key);
         trim(value);
         
-        DebugLogger::debug("After trim - key='" + key + "' value='" + value + "'");
         
         if (key.empty()) {
             skippedLines++;
@@ -2126,7 +2191,6 @@ bool ConfigManager::loadFromFile(const std::string& path) {
             if (parser->parse(key, value)) {
                 parsed = true;
                 processedLines++;
-                DebugLogger::debug("Parsed key: " + key + " = " + value + " by " + parser->getCategory());
                 break;
             }
         }
@@ -2137,7 +2201,6 @@ bool ConfigManager::loadFromFile(const std::string& path) {
         }
     }
     
-    DebugLogger::info("Config loaded from: " + path + " (processed: " + std::to_string(processedLines) + ", skipped: " + std::to_string(skippedLines) + ")");
     loaded_ = true;
     return true;
 }
@@ -2179,7 +2242,6 @@ bool ConfigManager::loadAll() {
         if (loadFromFile(homeConfig)) return true;
     }
     
-    DebugLogger::info("No config files found, using defaults");
     loaded_ = true;
     return true;
 }
@@ -2194,7 +2256,7 @@ void ConfigManager::clearOverrides() {
 
 bool ConfigManager::validate() const {
     VisualConfigParser visualParser(const_cast<VisualConfig&>(visual_));
-    AudioConfigParser audioParser(const_cast<AudioConfig&>(audio_));
+    AudioConfigParser audioParser(const_cast<AudioConfig*>(&audio_));
     InputConfigParser inputParser(const_cast<InputConfig&>(input_));
     PiecesConfigParser piecesParser(const_cast<PiecesConfig&>(pieces_));
     GameConfigParser gameParser(const_cast<GameConfig&>(game_));
@@ -2225,100 +2287,98 @@ static void applyConfigToAudio(AudioSystem& audio, const AudioConfig& config) {
  * @brief Apply visual configuration to global theme
  */
 static void applyConfigToTheme(const VisualConfig& config) {
-    DebugLogger::debug("applyConfigToTheme - Applying visual configuration to THEME");
     
     // Apply colors
-    THEME.bg_r = config.colors.background.r;
-    THEME.bg_g = config.colors.background.g;
-    THEME.bg_b = config.colors.background.b;
+    themeManager.getTheme().bg_r = config.colors.background.r;
+    themeManager.getTheme().bg_g = config.colors.background.g;
+    themeManager.getTheme().bg_b = config.colors.background.b;
     
-    DebugLogger::debug("Background color: R=" + std::to_string(THEME.bg_r) + " G=" + std::to_string(THEME.bg_g) + " B=" + std::to_string(THEME.bg_b));
     
-    THEME.board_empty_r = config.colors.boardEmpty.r;
-    THEME.board_empty_g = config.colors.boardEmpty.g;
-    THEME.board_empty_b = config.colors.boardEmpty.b;
+    themeManager.getTheme().board_empty_r = config.colors.boardEmpty.r;
+    themeManager.getTheme().board_empty_g = config.colors.boardEmpty.g;
+    themeManager.getTheme().board_empty_b = config.colors.boardEmpty.b;
     
-    THEME.panel_fill_r = config.colors.panelFill.r;
-    THEME.panel_fill_g = config.colors.panelFill.g;
-    THEME.panel_fill_b = config.colors.panelFill.b;
+    themeManager.getTheme().panel_fill_r = config.colors.panelFill.r;
+    themeManager.getTheme().panel_fill_g = config.colors.panelFill.g;
+    themeManager.getTheme().panel_fill_b = config.colors.panelFill.b;
     
-    THEME.panel_outline_r = config.colors.panelOutline.r;
-    THEME.panel_outline_g = config.colors.panelOutline.g;
-    THEME.panel_outline_b = config.colors.panelOutline.b;
-    THEME.panel_outline_a = config.colors.panelOutlineAlpha;
+    themeManager.getTheme().panel_outline_r = config.colors.panelOutline.r;
+    themeManager.getTheme().panel_outline_g = config.colors.panelOutline.g;
+    themeManager.getTheme().panel_outline_b = config.colors.panelOutline.b;
+    themeManager.getTheme().panel_outline_a = config.colors.panelOutlineAlpha;
     
     // Banner
-    THEME.banner_bg_r = config.colors.bannerBg.r;
-    THEME.banner_bg_g = config.colors.bannerBg.g;
-    THEME.banner_bg_b = config.colors.bannerBg.b;
+    themeManager.getTheme().banner_bg_r = config.colors.bannerBg.r;
+    themeManager.getTheme().banner_bg_g = config.colors.bannerBg.g;
+    themeManager.getTheme().banner_bg_b = config.colors.bannerBg.b;
     
-    THEME.banner_outline_r = config.colors.bannerOutline.r;
-    THEME.banner_outline_g = config.colors.bannerOutline.g;
-    THEME.banner_outline_b = config.colors.bannerOutline.b;
-    THEME.banner_outline_a = config.colors.bannerOutlineAlpha;
+    themeManager.getTheme().banner_outline_r = config.colors.bannerOutline.r;
+    themeManager.getTheme().banner_outline_g = config.colors.bannerOutline.g;
+    themeManager.getTheme().banner_outline_b = config.colors.bannerOutline.b;
+    themeManager.getTheme().banner_outline_a = config.colors.bannerOutlineAlpha;
     
-    THEME.banner_text_r = config.colors.bannerText.r;
-    THEME.banner_text_g = config.colors.bannerText.g;
-    THEME.banner_text_b = config.colors.bannerText.b;
+    themeManager.getTheme().banner_text_r = config.colors.bannerText.r;
+    themeManager.getTheme().banner_text_g = config.colors.bannerText.g;
+    themeManager.getTheme().banner_text_b = config.colors.bannerText.b;
     
     // HUD
-    THEME.hud_label_r = config.colors.hudLabel.r;
-    THEME.hud_label_g = config.colors.hudLabel.g;
-    THEME.hud_label_b = config.colors.hudLabel.b;
+    themeManager.getTheme().hud_label_r = config.colors.hudLabel.r;
+    themeManager.getTheme().hud_label_g = config.colors.hudLabel.g;
+    themeManager.getTheme().hud_label_b = config.colors.hudLabel.b;
     
-    THEME.hud_score_r = config.colors.hudScore.r;
-    THEME.hud_score_g = config.colors.hudScore.g;
-    THEME.hud_score_b = config.colors.hudScore.b;
+    themeManager.getTheme().hud_score_r = config.colors.hudScore.r;
+    themeManager.getTheme().hud_score_g = config.colors.hudScore.g;
+    themeManager.getTheme().hud_score_b = config.colors.hudScore.b;
     
-    THEME.hud_lines_r = config.colors.hudLines.r;
-    THEME.hud_lines_g = config.colors.hudLines.g;
-    THEME.hud_lines_b = config.colors.hudLines.b;
+    themeManager.getTheme().hud_lines_r = config.colors.hudLines.r;
+    themeManager.getTheme().hud_lines_g = config.colors.hudLines.g;
+    themeManager.getTheme().hud_lines_b = config.colors.hudLines.b;
     
-    THEME.hud_level_r = config.colors.hudLevel.r;
-    THEME.hud_level_g = config.colors.hudLevel.g;
-    THEME.hud_level_b = config.colors.hudLevel.b;
+    themeManager.getTheme().hud_level_r = config.colors.hudLevel.r;
+    themeManager.getTheme().hud_level_g = config.colors.hudLevel.g;
+    themeManager.getTheme().hud_level_b = config.colors.hudLevel.b;
     
     // NEXT
-    THEME.next_fill_r = config.colors.nextFill.r;
-    THEME.next_fill_g = config.colors.nextFill.g;
-    THEME.next_fill_b = config.colors.nextFill.b;
+    themeManager.getTheme().next_fill_r = config.colors.nextFill.r;
+    themeManager.getTheme().next_fill_g = config.colors.nextFill.g;
+    themeManager.getTheme().next_fill_b = config.colors.nextFill.b;
     
-    THEME.next_outline_r = config.colors.nextOutline.r;
-    THEME.next_outline_g = config.colors.nextOutline.g;
-    THEME.next_outline_b = config.colors.nextOutline.b;
-    THEME.next_outline_a = config.colors.nextOutlineAlpha;
+    themeManager.getTheme().next_outline_r = config.colors.nextOutline.r;
+    themeManager.getTheme().next_outline_g = config.colors.nextOutline.g;
+    themeManager.getTheme().next_outline_b = config.colors.nextOutline.b;
+    themeManager.getTheme().next_outline_a = config.colors.nextOutlineAlpha;
     
-    THEME.next_label_r = config.colors.nextLabel.r;
-    THEME.next_label_g = config.colors.nextLabel.g;
-    THEME.next_label_b = config.colors.nextLabel.b;
+    themeManager.getTheme().next_label_r = config.colors.nextLabel.r;
+    themeManager.getTheme().next_label_g = config.colors.nextLabel.g;
+    themeManager.getTheme().next_label_b = config.colors.nextLabel.b;
     
-    THEME.next_grid_dark_r = config.colors.nextGridDark.r;
-    THEME.next_grid_dark_g = config.colors.nextGridDark.g;
-    THEME.next_grid_dark_b = config.colors.nextGridDark.b;
+    themeManager.getTheme().next_grid_dark_r = config.colors.nextGridDark.r;
+    themeManager.getTheme().next_grid_dark_g = config.colors.nextGridDark.g;
+    themeManager.getTheme().next_grid_dark_b = config.colors.nextGridDark.b;
     
-    THEME.next_grid_light_r = config.colors.nextGridLight.r;
-    THEME.next_grid_light_g = config.colors.nextGridLight.g;
-    THEME.next_grid_light_b = config.colors.nextGridLight.b;
-    THEME.next_grid_use_rgb = config.colors.nextGridUseRgb;
+    themeManager.getTheme().next_grid_light_r = config.colors.nextGridLight.r;
+    themeManager.getTheme().next_grid_light_g = config.colors.nextGridLight.g;
+    themeManager.getTheme().next_grid_light_b = config.colors.nextGridLight.b;
+    themeManager.getTheme().next_grid_use_rgb = config.colors.nextGridUseRgb;
     
     // Overlay
-    THEME.overlay_fill_r = config.colors.overlayFill.r;
-    THEME.overlay_fill_g = config.colors.overlayFill.g;
-    THEME.overlay_fill_b = config.colors.overlayFill.b;
-    THEME.overlay_fill_a = config.colors.overlayFillAlpha;
+    themeManager.getTheme().overlay_fill_r = config.colors.overlayFill.r;
+    themeManager.getTheme().overlay_fill_g = config.colors.overlayFill.g;
+    themeManager.getTheme().overlay_fill_b = config.colors.overlayFill.b;
+    themeManager.getTheme().overlay_fill_a = config.colors.overlayFillAlpha;
     
-    THEME.overlay_outline_r = config.colors.overlayOutline.r;
-    THEME.overlay_outline_g = config.colors.overlayOutline.g;
-    THEME.overlay_outline_b = config.colors.overlayOutline.b;
-    THEME.overlay_outline_a = config.colors.overlayOutlineAlpha;
+    themeManager.getTheme().overlay_outline_r = config.colors.overlayOutline.r;
+    themeManager.getTheme().overlay_outline_g = config.colors.overlayOutline.g;
+    themeManager.getTheme().overlay_outline_b = config.colors.overlayOutline.b;
+    themeManager.getTheme().overlay_outline_a = config.colors.overlayOutlineAlpha;
     
-    THEME.overlay_top_r = config.colors.overlayTop.r;
-    THEME.overlay_top_g = config.colors.overlayTop.g;
-    THEME.overlay_top_b = config.colors.overlayTop.b;
+    themeManager.getTheme().overlay_top_r = config.colors.overlayTop.r;
+    themeManager.getTheme().overlay_top_g = config.colors.overlayTop.g;
+    themeManager.getTheme().overlay_top_b = config.colors.overlayTop.b;
     
-    THEME.overlay_sub_r = config.colors.overlaySub.r;
-    THEME.overlay_sub_g = config.colors.overlaySub.g;
-    THEME.overlay_sub_b = config.colors.overlaySub.b;
+    themeManager.getTheme().overlay_sub_r = config.colors.overlaySub.r;
+    themeManager.getTheme().overlay_sub_g = config.colors.overlaySub.g;
+    themeManager.getTheme().overlay_sub_b = config.colors.overlaySub.b;
     
     // Apply effects
     ENABLE_BANNER_SWEEP = config.effects.bannerSweep;
@@ -2346,6 +2406,13 @@ static void applyConfigToTheme(const VisualConfig& config) {
 
 // Implementação da função processAudioConfigs
 static bool processAudioConfigs(const std::string& key, const std::string& val, int& processedLines, AudioSystem& audio) {
+    // Delegate to the new AudioConfig system
+    if (audio.loadFromConfig(key, val)) {
+        processedLines++;
+        return true;
+    }
+    
+    // Legacy compatibility - update old fields for backward compatibility
     auto setb = [&](const char* K, bool& ref) {
         if (key == K) { 
             std::string v = val; 
@@ -2366,7 +2433,7 @@ static bool processAudioConfigs(const std::string& key, const std::string& val, 
         return false; 
     };
 
-    // Configurações de áudio
+    // Update legacy fields for backward compatibility
     if (setf("AUDIO_MASTER_VOLUME", audio.masterVolume)) { processedLines++; return true; }
     if (setf("AUDIO_SFX_VOLUME", audio.sfxVolume)) { processedLines++; return true; }
     if (setf("AUDIO_AMBIENT_VOLUME", audio.ambientVolume)) { processedLines++; return true; }
@@ -2603,17 +2670,7 @@ public:
     
     // Debug method to check which handler is active
     void debugActiveHandler() {
-        DebugLogger::debug("InputManager: Total handlers: " + std::to_string(handlers.size()));
-        DebugLogger::debug("InputManager: Primary handler: " + std::string(primaryHandler ? "Set" : "Not set"));
-        
-        auto handler = getActiveHandler();
-        if (handler) {
-            // Use typeid to avoid forward declaration issues
-            const char* typeName = typeid(*handler).name();
-            DebugLogger::debug("InputManager: Active handler type: " + std::string(typeName));
-        } else {
-            DebugLogger::debug("InputManager: No active handler found");
-        }
+        // Debug info removed for verbosity reduction
     }
     
     bool shouldMoveLeft() {
@@ -3019,16 +3076,6 @@ public:
         if (device_.isConnected()) {
             state_.updateButtonStates(device_, config_);
             
-            // Debug logging para verificar se os inputs estão sendo detectados
-            static int debugCounter = 0;
-            if (debugCounter++ % 60 == 0) { // Log a cada 60 frames (1 segundo)
-                DebugLogger::debug("Joystick Debug - B0:" + std::to_string(state_.buttonStates[0]) + 
-                                 " B1:" + std::to_string(state_.buttonStates[1]) + 
-                                 " B8:" + std::to_string(state_.buttonStates[8]) + 
-                                 " B9:" + std::to_string(state_.buttonStates[9]) +
-                                 " AXIS0:" + std::to_string(state_.leftStickX) +
-                                 " AXIS1:" + std::to_string(state_.leftStickY));
-            }
         }
     }
     
@@ -3177,84 +3224,7 @@ void InputManager::cleanup() {
     primaryHandler = nullptr;
 }
 
-// Implementação da função processJoystickConfigs
-static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick) {
-    auto seti = [&](const char* K, int& ref) { 
-        if (key == K) { 
-            int v = std::atoi(val.c_str());
-            if (v >= 0 && v < 32) {
-                ref = v; 
-                return true; 
-            }
-        } 
-        return false; 
-    };
-    auto setf = [&](const char* K, float& ref) { 
-        if (key == K) { 
-            float v = (float)std::atof(val.c_str());
-            if (v >= 0.0f && v <= 1.0f) {
-                ref = v; 
-                return true; 
-            }
-        } 
-        return false; 
-    };
-
-    // Get reference to config for easier access
-    JoystickConfig& config = joystick.getConfig();
-
-    // Configurações de mapeamento de botões
-    if (seti("JOYSTICK_BUTTON_LEFT", config.buttonLeft)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_RIGHT", config.buttonRight)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_DOWN", config.buttonDown)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_UP", config.buttonUp)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_ROTATE_CCW", config.buttonRotateCCW)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_ROTATE_CW", config.buttonRotateCW)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_SOFT_DROP", config.buttonSoftDrop)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_HARD_DROP", config.buttonHardDrop)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_PAUSE", config.buttonPause)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_START", config.buttonStart)) { processedLines++; return true; }
-    if (seti("JOYSTICK_BUTTON_QUIT", config.buttonQuit)) { processedLines++; return true; }
-    
-    // Configurações de analógico
-    if (setf("JOYSTICK_ANALOG_DEADZONE", config.analogDeadzone)) { processedLines++; return true; }
-    if (setf("JOYSTICK_ANALOG_SENSITIVITY", config.analogSensitivity)) { processedLines++; return true; }
-    if (key == "JOYSTICK_INVERT_Y_AXIS") {
-        int v = std::atoi(val.c_str());
-        config.invertYAxis = (v != 0);
-        processedLines++;
-        return true;
-    }
-    
-    // Configurações de timing
-    if (key == "JOYSTICK_MOVE_REPEAT_DELAY") {
-        int v = std::atoi(val.c_str());
-        if (v >= 50 && v <= 1000) {
-            config.moveRepeatDelay = v;
-            processedLines++;
-            return true;
-        }
-    }
-    if (key == "JOYSTICK_SOFT_DROP_DELAY") {
-        int v = std::atoi(val.c_str());
-        if (v >= 50 && v <= 500) {
-            config.softDropRepeatDelay = v;
-            processedLines++;
-            return true;
-        }
-    }
-    
-    // Configurações de velocidade do jogo
-    if (seti("GAME_SPEED_START_MS", TICK_MS_START)) { processedLines++; return true; }
-    if (seti("GAME_SPEED_MIN_MS", TICK_MS_MIN)) { processedLines++; return true; }
-    if (seti("GAME_SPEED_ACCELERATION", SPEED_ACCELERATION)) { processedLines++; return true; }
-    
-    // Configurações de renderização
-    if (setf("ASPECT_CORRECTION_FACTOR", ASPECT_CORRECTION_FACTOR)) { processedLines++; return true; }
-    if (seti("PREVIEW_GRID", PREVIEW_GRID)) { processedLines++; return true; }
-    
-    return false;
-}
+// processJoystickConfigs moved after pieceManager definition
 
 // ===========================
 //   SISTEMA DE GAME STATE MODULAR
@@ -3354,7 +3324,7 @@ private:
     int score_ = 0;
     int lines_ = 0;
     int level_ = 0;
-    int tickMs_ = TICK_MS_START;
+    int tickMs_ = gameConfig.tickMsStart;
     
 public:
     ScoreSystem() = default;
@@ -3375,9 +3345,9 @@ public:
         level_ = lines_ / 10; // Level up every 10 lines
         
         // Update game speed based on level
-        tickMs_ = TICK_MS_START - (level_ * SPEED_ACCELERATION);
-        if (tickMs_ < TICK_MS_MIN) {
-            tickMs_ = TICK_MS_MIN;
+        tickMs_ = gameConfig.tickMsStart - (level_ * SPEED_ACCELERATION);
+        if (tickMs_ < gameConfig.tickMsMin) {
+            tickMs_ = gameConfig.tickMsMin;
         }
     }
     
@@ -3385,7 +3355,7 @@ public:
         score_ = 0;
         lines_ = 0;
         level_ = 0;
-        tickMs_ = TICK_MS_START;
+        tickMs_ = gameConfig.tickMsStart;
     }
     
     // Configuration
@@ -3405,6 +3375,11 @@ private:
     size_t bagPos_ = 0;
     std::mt19937 rng_;
     int nextIdx_ = 0;
+    
+    // Configuration fields (replacing temporary global variables)
+    int previewGrid_ = 6;
+    RandType randomizerType_ = RandType::SIMPLE;
+    int randBagSize_ = 0;
     
 public:
     PieceManager() : rng_((unsigned)time(nullptr)) {
@@ -3434,7 +3409,7 @@ public:
     // Bag management
     void refillBag() {
         bag_.clear();
-        int n = (RAND_BAG_SIZE > 0 ? RAND_BAG_SIZE : (int)PIECES.size());
+        int n = (randBagSize_ > 0 ? randBagSize_ : (int)PIECES.size());
         n = std::min(n, (int)PIECES.size());
         
         for (int i = 0; i < n; i++) {
@@ -3457,7 +3432,251 @@ public:
     
     // Random number generation
     std::mt19937& getRng() { return rng_; }
+    
+    // Configuration methods
+    int getPreviewGrid() const { return previewGrid_; }
+    RandType getRandomizerType() const { return randomizerType_; }
+    int getRandBagSize() const { return randBagSize_; }
+    void setPreviewGrid(int value) { previewGrid_ = value; }
+    void setRandomizerType(RandType type) { randomizerType_ = type; }
+    void setRandBagSize(int size) { randBagSize_ = size; }
+    
+    // Piece loading methods
+    bool loadPiecesFile() {
+        if(const char* env = std::getenv("DROPBLOCKS_PIECES")) {
+            if(loadPiecesPath(env)) return true;
+        }
+        if(!PIECES_FILE_PATH.empty()) {
+            if(loadPiecesPath(PIECES_FILE_PATH)) return true;
+        }
+        if(loadPiecesPath("default.pieces")) return true;
+        if(const char* home = std::getenv("HOME")){
+            std::string p = std::string(home) + "/.config/default.pieces";
+            if(loadPiecesPath(p)) return true;
+        }
+        return false;
+    }
+    
+    void seedFallback() {
+        SDL_Log("Usando fallback interno de peças.");
+        PIECES.clear();
+        auto mk = [](std::initializer_list<std::pair<int,int>> c, Uint8 r, Uint8 g, Uint8 b){
+            Piece p; p.r=r; p.g=g; p.b=b;
+            for(auto& coord : c) p.rot[0].push_back(coord);
+            return p;
+        };
+        
+        // Peças básicas do Tetris
+        PIECES.push_back(mk({{0,0},{1,0},{2,0},{3,0}}, 80,120,220));  // I
+        PIECES.push_back(mk({{0,0},{1,0},{0,1},{1,1}}, 220,180,80));  // O
+        PIECES.push_back(mk({{0,0},{1,0},{2,0},{1,1}}, 160,80,220));  // T
+        PIECES.push_back(mk({{0,0},{1,0},{1,1},{2,1}}, 80,220,80));   // S
+        PIECES.push_back(mk({{1,0},{2,0},{0,1},{1,1}}, 220,80,80));   // Z
+        PIECES.push_back(mk({{0,0},{0,1},{0,2},{1,2}}, 220,160,80));  // L
+        PIECES.push_back(mk({{1,0},{1,1},{1,2},{0,2}}, 80,180,220));  // J
+        
+        // Peças extras
+        PIECES.push_back(mk({{0,0},{1,0},{2,0},{0,1}}, 220,80,160));
+        PIECES.push_back(mk({{0,0},{1,0},{2,0},{1,1}}, 160,220,80));
+        PIECES.push_back(mk({{0,0},{1,0},{2,0},{2,1}}, 80,160,220));
+        PIECES.push_back(mk({{0,0},{1,0},{2,0},{3,0}}, 220,160,80));
+        PIECES.push_back(mk({{0,0},{1,0},{2,0},{0,1},{1,1}}, 220,160,80));
+        PIECES.push_back(mk({{0,0},{1,0},{-1,0},{0,1},{1,1}}, 160,80,220));
+    }
+    
+    void initializeRandomizer() {
+        randomizerType_ = RandType::SIMPLE; 
+        randBagSize_ = 0;
+    }
 };
+
+// Global piece manager instance
+PieceManager pieceManager;
+
+// Funções que usam pieceManager (definidas após sua declaração)
+static bool loadPiecesFile(){
+    return pieceManager.loadPiecesFile();
+}
+
+static void seedPiecesFallback(){
+    pieceManager.seedFallback();
+}
+
+static bool loadPiecesFromStream(std::istream& in) {
+    PIECES.clear(); 
+    pieceManager.setRandomizerType(RandType::SIMPLE); 
+    pieceManager.setRandBagSize(0);
+
+    std::string line, section;
+    Piece cur; 
+    bool inPiece = false; 
+    bool rotExplicit = false;
+    std::vector<std::pair<int,int>> rot0, rot1, rot2, rot3, base;
+
+    auto flushPiece = [&]() {
+        if (!inPiece) return;
+        
+        buildPieceRotations(cur, base, rot0, rot1, rot2, rot3, rotExplicit);
+        
+        if (!cur.rot.empty()) {
+            PIECES.push_back(cur);
+        }
+        
+        cur = Piece{}; 
+        rotExplicit = false; 
+        rot0.clear(); rot1.clear(); rot2.clear(); rot3.clear(); base.clear(); 
+        inPiece = false;
+    };
+
+    while (std::getline(in, line)) {
+        line = parsePiecesLine(line);
+        trim(line); 
+        if (line.empty()) continue;
+
+        if (line.front() == '[' && line.back() == ']') {
+            std::string sec = line.substr(1, line.size() - 2);
+            std::string SEC = sec; 
+            for (char& c : SEC) c = (char)std::toupper((unsigned char)c);
+            
+            if (SEC.rfind("PIECE.", 0) == 0) {
+                flushPiece(); 
+                inPiece = true; 
+                cur = Piece{}; 
+                rotExplicit = false;
+                rot0.clear(); rot1.clear(); rot2.clear(); rot3.clear(); base.clear();
+                cur.name = sec.substr(6);
+            } else {
+                flushPiece(); 
+                inPiece = false; 
+                section = SEC;
+            }
+            continue;
+        }
+
+        size_t eq = line.find('='); 
+        if (eq == std::string::npos) continue;
+        
+        std::string k = line.substr(0, eq), v = line.substr(eq + 1); 
+        trim(k); trim(v);
+        std::string K = k; 
+        for (char& c : K) c = (char)std::toupper((unsigned char)c);
+
+        if (inPiece) {
+            if (processPieceProperty(cur, K, v, base, rot0, rot1, rot2, rot3, rotExplicit)) {
+                continue;
+            }
+        } else {
+            if (section == "SET") {
+                if (K == "NAME") { /* opcional */ continue; }
+                if (K == "PREVIEWGRID" || K == "PREVIEW_GRID") { 
+                    int n; 
+                    if (parseInt(v, n) && n > 0 && n <= 10) pieceManager.setPreviewGrid(n); 
+                    continue; 
+                }
+            }
+            if (section == "RANDOMIZER") {
+                if (K == "TYPE") { 
+                    std::string vv = v; 
+                    for (char& c : vv) c = (char)std::tolower((unsigned char)c);
+                    pieceManager.setRandomizerType(vv == "bag" ? RandType::BAG : RandType::SIMPLE); 
+                    continue; 
+                }
+                if (K == "BAGSIZE") { 
+                    int n; 
+                    if (parseInt(v, n) && n >= 0) pieceManager.setRandBagSize(n); 
+                    continue; 
+                }
+            }
+        }
+    }
+    flushPiece();
+    return !PIECES.empty();
+}
+
+static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick) {
+    auto seti = [&](const char* K, int& ref) { 
+        if (key == K) { 
+            int v = std::atoi(val.c_str());
+            if (v >= 0 && v < 32) {
+                ref = v; 
+                return true; 
+            }
+        } 
+        return false; 
+    };
+    auto setf = [&](const char* K, float& ref) { 
+        if (key == K) { 
+            float v = (float)std::atof(val.c_str());
+            if (v >= 0.0f && v <= 1.0f) {
+                ref = v; 
+                return true; 
+            }
+        } 
+        return false; 
+    };
+
+    // Get reference to config for easier access
+    JoystickConfig& config = joystick.getConfig();
+
+    // Configurações de mapeamento de botões
+    if (seti("JOYSTICK_BUTTON_LEFT", config.buttonLeft)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_RIGHT", config.buttonRight)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_DOWN", config.buttonDown)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_UP", config.buttonUp)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_ROTATE_CCW", config.buttonRotateCCW)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_ROTATE_CW", config.buttonRotateCW)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_SOFT_DROP", config.buttonSoftDrop)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_HARD_DROP", config.buttonHardDrop)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_PAUSE", config.buttonPause)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_START", config.buttonStart)) { processedLines++; return true; }
+    if (seti("JOYSTICK_BUTTON_QUIT", config.buttonQuit)) { processedLines++; return true; }
+    
+    // Configurações de analógico
+    if (setf("JOYSTICK_ANALOG_DEADZONE", config.analogDeadzone)) { processedLines++; return true; }
+    if (setf("JOYSTICK_ANALOG_SENSITIVITY", config.analogSensitivity)) { processedLines++; return true; }
+    if (key == "JOYSTICK_INVERT_Y_AXIS") {
+        int v = std::atoi(val.c_str());
+        config.invertYAxis = (v != 0);
+        processedLines++;
+        return true;
+    }
+    
+    // Configurações de timing
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY") {
+        int v = std::atoi(val.c_str());
+        if (v >= 50 && v <= 1000) {
+            config.moveRepeatDelay = v;
+            processedLines++;
+            return true;
+        }
+    }
+    if (key == "JOYSTICK_SOFT_DROP_DELAY") {
+        int v = std::atoi(val.c_str());
+        if (v >= 50 && v <= 500) {
+            config.softDropRepeatDelay = v;
+            processedLines++;
+            return true;
+        }
+    }
+    
+    // Configurações de velocidade do jogo
+    if (seti("GAME_SPEED_START_MS", gameConfig.tickMsStart)) { processedLines++; return true; }
+    if (seti("GAME_SPEED_MIN_MS", gameConfig.tickMsMin)) { processedLines++; return true; }
+    if (seti("GAME_SPEED_ACCELERATION", SPEED_ACCELERATION)) { processedLines++; return true; }
+    
+    // Configurações de renderização
+    if (setf("ASPECT_CORRECTION_FACTOR", ASPECT_CORRECTION_FACTOR)) { processedLines++; return true; }
+    if (key == "PREVIEW_GRID") {
+        int v = std::atoi(val.c_str());
+        if (v > 0 && v <= 10) {
+            pieceManager.setPreviewGrid(v);
+            processedLines++;
+            return true;
+        }
+    }
+    
+    return false;
+}
 
 /**
  * @brief Main game state coordinator
@@ -3673,7 +3892,6 @@ public:
         
         // Movimento esquerda
         if (inputManager.shouldMoveLeft() && !coll(-1, 0, 0)) {
-                DebugLogger::debug("Input: Move Left detected!");
                 activePiece_.x--;
             audio.playMovementSound();
             inputManager.resetTimers();
@@ -3681,7 +3899,6 @@ public:
         
         // Movimento direita
         if (inputManager.shouldMoveRight() && !coll(1, 0, 0)) {
-                DebugLogger::debug("Input: Move Right detected!");
                 activePiece_.x++;
             audio.playMovementSound();
             inputManager.resetTimers();
@@ -3703,7 +3920,6 @@ public:
         
         // Rotação CCW
         if (inputManager.shouldRotateCCW()) {
-                DebugLogger::debug("Input: Rotate CCW detected!");
                 rotateWithKicks(activePiece_, board_.getGrid(), -1, audio);
             audio.playRotationSound(false);  // CCW
             inputManager.resetTimers();
@@ -3711,7 +3927,6 @@ public:
         
         // Rotação CW
         if (inputManager.shouldRotateCW()) {
-                DebugLogger::debug("Input: Rotate CW detected!");
                 rotateWithKicks(activePiece_, board_.getGrid(), +1, audio);
             audio.playRotationSound(true);   // CW
             inputManager.resetTimers();
@@ -3724,8 +3939,8 @@ public:
  * @brief Apply game configuration to GameState
  */
 static void applyConfigToGame(GameState& state, const GameConfig& config) {
-    TICK_MS_START = config.tickMsStart;
-    TICK_MS_MIN = config.tickMsMin;
+    gameConfig.tickMsStart = config.tickMsStart;
+    gameConfig.tickMsMin = config.tickMsMin;
     SPEED_ACCELERATION = config.speedAcceleration;
     LEVEL_STEP = config.levelStep;
     ASPECT_CORRECTION_FACTOR = config.aspectCorrectionFactor;
@@ -3738,20 +3953,20 @@ static void applyConfigToGame(GameState& state, const GameConfig& config) {
  * @brief Apply pieces configuration to global theme
  */
 static void applyConfigToPieces(const PiecesConfig& config) {
-    DebugLogger::debug("applyConfigToPieces - Applying pieces configuration to THEME");
     
     // Apply piece colors
     if (!config.pieceColors.empty()) {
-        THEME.piece_colors.clear();
+        themeManager.getTheme().piece_colors.clear();
         for (const auto& color : config.pieceColors) {
-            THEME.piece_colors.push_back({color.r, color.g, color.b});
+            themeManager.getTheme().piece_colors.push_back({color.r, color.g, color.b});
         }
-        DebugLogger::debug("Applied " + std::to_string(config.pieceColors.size()) + " piece colors");
     }
 }
 
 // Implementação da função initializeRandomizer
 static void initializeRandomizer(GameState& state) {
+    pieceManager.initializeRandomizer();
+    
     // Use the new PieceManager system
     state.getPieces().reset();
     
@@ -3949,7 +4164,7 @@ static bool initializeGame(GameState& state, AudioSystem& audio, ConfigManager& 
     state.getPieces().initialize();
     
     printf("Pieces: %zu, PreviewGrid=%d, Randomizer=%s, BagSize=%d\n",
-           PIECES.size(), PREVIEW_GRID, (RAND_TYPE == RandType::BAG ? "bag" : "simple"), RAND_BAG_SIZE);
+           PIECES.size(), pieceManager.getPreviewGrid(), (pieceManager.getRandomizerType() == RandType::BAG ? "bag" : "simple"), pieceManager.getRandBagSize());
     printf("Audio: Master=%.1f, SFX=%.1f, Ambient=%.1f\n", 
            audio.masterVolume, audio.sfxVolume, audio.ambientVolume);
     fflush(stdout);
@@ -4023,7 +4238,7 @@ protected:
 class BackgroundLayer : public RenderLayer {
 public:
     void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
-        SDL_SetRenderDrawColor(renderer, THEME.bg_r, THEME.bg_g, THEME.bg_b, 255);
+        SDL_SetRenderDrawColor(renderer, themeManager.getTheme().bg_r, themeManager.getTheme().bg_g, themeManager.getTheme().bg_b, 255);
         SDL_RenderClear(renderer);
     }
     
@@ -4046,9 +4261,9 @@ public:
     void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
         // Banner
         drawRoundedFilled(renderer, layout.BX, layout.BY, layout.BW, layout.BH, 10, 
-                         THEME.banner_bg_r, THEME.banner_bg_g, THEME.banner_bg_b, 255);
+                         themeManager.getTheme().banner_bg_r, themeManager.getTheme().banner_bg_g, themeManager.getTheme().banner_bg_b, 255);
         drawRoundedOutline(renderer, layout.BX, layout.BY, layout.BW, layout.BH, 10, 2, 
-                          THEME.banner_outline_r, THEME.banner_outline_g, THEME.banner_outline_b, THEME.banner_outline_a);
+                          themeManager.getTheme().banner_outline_r, themeManager.getTheme().banner_outline_g, themeManager.getTheme().banner_outline_b, themeManager.getTheme().banner_outline_a);
 
         // Título vertical
         int bty = layout.BY + 10, cxText = layout.BX + (layout.BW - 5 * layout.scale) / 2;
@@ -4058,7 +4273,7 @@ public:
             ch = (char)std::toupper((unsigned char)ch);
             if (ch < 'A' || ch > 'Z') ch = ' ';
             drawPixelText(renderer, cxText, bty, std::string(1, ch), layout.scale, 
-                         THEME.banner_text_r, THEME.banner_text_g, THEME.banner_text_b);
+                         themeManager.getTheme().banner_text_r, themeManager.getTheme().banner_text_g, themeManager.getTheme().banner_text_b);
             bty += 9 * layout.scale;
         }
 
@@ -4109,7 +4324,7 @@ public:
             for (int x = 0; x < COLS; ++x) {
                 SDL_Rect r{layout.GX + x * layout.cellBoard, layout.GY + y * layout.cellBoard, 
                           layout.cellBoard - 1, layout.cellBoard - 1};
-                SDL_SetRenderDrawColor(renderer, THEME.board_empty_r, THEME.board_empty_g, THEME.board_empty_b, 255);
+                SDL_SetRenderDrawColor(renderer, themeManager.getTheme().board_empty_r, themeManager.getTheme().board_empty_g, themeManager.getTheme().board_empty_b, 255);
                 SDL_RenderFillRect(renderer, &r);
             }
         }
@@ -4151,35 +4366,35 @@ public:
     void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override {
         // Painel (HUD)
         drawRoundedFilled(renderer, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 
-                         THEME.panel_fill_r, THEME.panel_fill_g, THEME.panel_fill_b, 255);
+                         themeManager.getTheme().panel_fill_r, themeManager.getTheme().panel_fill_g, themeManager.getTheme().panel_fill_b, 255);
         drawRoundedOutline(renderer, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 2, 
-                          THEME.panel_outline_r, THEME.panel_outline_g, THEME.panel_outline_b, THEME.panel_outline_a);
+                          themeManager.getTheme().panel_outline_r, themeManager.getTheme().panel_outline_g, themeManager.getTheme().panel_outline_b, themeManager.getTheme().panel_outline_a);
 
         // HUD textos
         int tx = layout.panelX + 14, ty = layout.panelY + 14;
-        drawPixelText(renderer, tx, ty, "SCORE", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 10 * layout.scale;
-        drawPixelText(renderer, tx, ty, fmtScore(state.getScoreValue()), layout.scale + 1, THEME.hud_score_r, THEME.hud_score_g, THEME.hud_score_b); ty += 12 * (layout.scale + 1);
-        drawPixelText(renderer, tx, ty, "LINES", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
-        drawPixelText(renderer, tx, ty, std::to_string(state.getLinesValue()), layout.scale, THEME.hud_lines_r, THEME.hud_lines_g, THEME.hud_lines_b); ty += 10 * layout.scale;
-        drawPixelText(renderer, tx, ty, "LEVEL", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
-        drawPixelText(renderer, tx, ty, std::to_string(state.getLevelValue()), layout.scale, THEME.hud_level_r, THEME.hud_level_g, THEME.hud_level_b); ty += 10 * layout.scale;
+        drawPixelText(renderer, tx, ty, "SCORE", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 10 * layout.scale;
+        drawPixelText(renderer, tx, ty, fmtScore(state.getScoreValue()), layout.scale + 1, themeManager.getTheme().hud_score_r, themeManager.getTheme().hud_score_g, themeManager.getTheme().hud_score_b); ty += 12 * (layout.scale + 1);
+        drawPixelText(renderer, tx, ty, "LINES", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 8 * layout.scale;
+        drawPixelText(renderer, tx, ty, std::to_string(state.getLinesValue()), layout.scale, themeManager.getTheme().hud_lines_r, themeManager.getTheme().hud_lines_g, themeManager.getTheme().hud_lines_b); ty += 10 * layout.scale;
+        drawPixelText(renderer, tx, ty, "LEVEL", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 8 * layout.scale;
+        drawPixelText(renderer, tx, ty, std::to_string(state.getLevelValue()), layout.scale, themeManager.getTheme().hud_level_r, themeManager.getTheme().hud_level_g, themeManager.getTheme().hud_level_b); ty += 10 * layout.scale;
 
-        // NEXT (quadro PREVIEW_GRID × PREVIEW_GRID)
+        // NEXT (quadro pieceManager.getPreviewGrid() × pieceManager.getPreviewGrid())
         int boxW = layout.panelW - 28;
         int boxH = std::min(layout.panelH - (ty - layout.panelY) - 14, boxW);
         int boxX = layout.panelX + 14;
         int boxY = ty;
 
-        drawRoundedFilled(renderer, boxX, boxY, boxW, boxH, 10, THEME.next_fill_r, THEME.next_fill_g, THEME.next_fill_b, 255);
-        drawRoundedOutline(renderer, boxX, boxY, boxW, boxH, 10, 2, THEME.next_outline_r, THEME.next_outline_g, THEME.next_outline_b, THEME.next_outline_a);
+        drawRoundedFilled(renderer, boxX, boxY, boxW, boxH, 10, themeManager.getTheme().next_fill_r, themeManager.getTheme().next_fill_g, themeManager.getTheme().next_fill_b, 255);
+        drawRoundedOutline(renderer, boxX, boxY, boxW, boxH, 10, 2, themeManager.getTheme().next_outline_r, themeManager.getTheme().next_outline_g, themeManager.getTheme().next_outline_b, themeManager.getTheme().next_outline_a);
 
-        drawPixelText(renderer, boxX + 10, boxY + 10, "NEXT", layout.scale, THEME.next_label_r, THEME.next_label_g, THEME.next_label_b);
+        drawPixelText(renderer, boxX + 10, boxY + 10, "NEXT", layout.scale, themeManager.getTheme().next_label_r, themeManager.getTheme().next_label_g, themeManager.getTheme().next_label_b);
 
         int padIn = 14 + 4 * layout.scale;
         int innerX = boxX + 10, innerY = boxY + padIn;
         int innerW = boxW - 20, innerH = boxH - padIn - 10;
 
-        int gridCols = PREVIEW_GRID, gridRows = PREVIEW_GRID;
+        int gridCols = pieceManager.getPreviewGrid(), gridRows = pieceManager.getPreviewGrid();
         int cellMini = std::min(innerW / gridCols, innerH / gridRows);
         if (cellMini < 1) cellMini = 1;
         if (cellMini > layout.cellBoard) cellMini = layout.cellBoard;
@@ -4193,13 +4408,13 @@ public:
             for (int gx = 0; gx < gridCols; ++gx) {
                 SDL_Rect q{gridX + gx * cellMini, gridY + gy * cellMini, cellMini - 1, cellMini - 1};
                 bool isLight = ((gx + gy) & 1) != 0;
-                if (THEME.next_grid_use_rgb) {
+                if (themeManager.getTheme().next_grid_use_rgb) {
                     if (isLight)
-                        SDL_SetRenderDrawColor(renderer, THEME.next_grid_light_r, THEME.next_grid_light_g, THEME.next_grid_light_b, 255);
+                        SDL_SetRenderDrawColor(renderer, themeManager.getTheme().next_grid_light_r, themeManager.getTheme().next_grid_light_g, themeManager.getTheme().next_grid_light_b, 255);
                     else
-                        SDL_SetRenderDrawColor(renderer, THEME.next_grid_dark_r, THEME.next_grid_dark_g, THEME.next_grid_dark_b, 255);
+                        SDL_SetRenderDrawColor(renderer, themeManager.getTheme().next_grid_dark_r, themeManager.getTheme().next_grid_dark_g, themeManager.getTheme().next_grid_dark_b, 255);
                 } else {
-                    Uint8 v = isLight ? THEME.next_grid_light : THEME.next_grid_dark;
+                    Uint8 v = isLight ? themeManager.getTheme().next_grid_light : themeManager.getTheme().next_grid_dark;
                     SDL_SetRenderDrawColor(renderer, v, v, v, 255);
                 }
                 SDL_RenderFillRect(renderer, &q);
@@ -4247,13 +4462,13 @@ public:
             int textH = 7 * (layout.scale + 2) + (subText.empty() ? 0 : (8 * layout.scale + 7 * layout.scale));
             int ow = textW + padX * 2, oh = textH + padY * 2;
             int ox = layout.GX + (layout.GW - ow) / 2, oy = layout.GY + (layout.GH - oh) / 2;
-            drawRoundedFilled(renderer, ox, oy, ow, oh, 14, THEME.overlay_fill_r, THEME.overlay_fill_g, THEME.overlay_fill_b, THEME.overlay_fill_a);
-            drawRoundedOutline(renderer, ox, oy, ow, oh, 14, 2, THEME.overlay_outline_r, THEME.overlay_outline_g, THEME.overlay_outline_b, THEME.overlay_outline_a);
+            drawRoundedFilled(renderer, ox, oy, ow, oh, 14, themeManager.getTheme().overlay_fill_r, themeManager.getTheme().overlay_fill_g, themeManager.getTheme().overlay_fill_b, themeManager.getTheme().overlay_fill_a);
+            drawRoundedOutline(renderer, ox, oy, ow, oh, 14, 2, themeManager.getTheme().overlay_outline_r, themeManager.getTheme().overlay_outline_g, themeManager.getTheme().overlay_outline_b, themeManager.getTheme().overlay_outline_a);
             int txc = ox + (ow - topW) / 2, tyc = oy + padY;
-            drawPixelTextOutlined(renderer, txc, tyc, topText, layout.scale + 2, THEME.overlay_top_r, THEME.overlay_top_g, THEME.overlay_top_b, 0, 0, 0);
+            drawPixelTextOutlined(renderer, txc, tyc, topText, layout.scale + 2, themeManager.getTheme().overlay_top_r, themeManager.getTheme().overlay_top_g, themeManager.getTheme().overlay_top_b, 0, 0, 0);
             if (!subText.empty()) {
                 int sx = ox + (ow - subW) / 2, sy = tyc + 7 * (layout.scale + 2) + 8 * layout.scale;
-                drawPixelTextOutlined(renderer, sx, sy, subText, layout.scale, THEME.overlay_sub_r, THEME.overlay_sub_g, THEME.overlay_sub_b, 0, 0, 0);
+                drawPixelTextOutlined(renderer, sx, sy, subText, layout.scale, themeManager.getTheme().overlay_sub_r, themeManager.getTheme().overlay_sub_g, themeManager.getTheme().overlay_sub_b, 0, 0, 0);
             }
         }
     }
@@ -4389,16 +4604,16 @@ void GameState::render(RenderManager& renderManager, const LayoutCache& layout) 
 // ===========================
 
 static void renderBackground(SDL_Renderer* ren, const LayoutCache& layout) {
-    SDL_SetRenderDrawColor(ren, THEME.bg_r, THEME.bg_g, THEME.bg_b, 255);
+    SDL_SetRenderDrawColor(ren, themeManager.getTheme().bg_r, themeManager.getTheme().bg_g, themeManager.getTheme().bg_b, 255);
     SDL_RenderClear(ren);
 }
 
 static void renderBanner(SDL_Renderer* ren, const LayoutCache& layout, AudioSystem& audio) {
     // Banner
     drawRoundedFilled(ren, layout.BX, layout.BY, layout.BW, layout.BH, 10, 
-                     THEME.banner_bg_r, THEME.banner_bg_g, THEME.banner_bg_b, 255);
+                     themeManager.getTheme().banner_bg_r, themeManager.getTheme().banner_bg_g, themeManager.getTheme().banner_bg_b, 255);
     drawRoundedOutline(ren, layout.BX, layout.BY, layout.BW, layout.BH, 10, 2, 
-                      THEME.banner_outline_r, THEME.banner_outline_g, THEME.banner_outline_b, THEME.banner_outline_a);
+                      themeManager.getTheme().banner_outline_r, themeManager.getTheme().banner_outline_g, themeManager.getTheme().banner_outline_b, themeManager.getTheme().banner_outline_a);
 
     // Título vertical
     int bty = layout.BY + 10, cxText = layout.BX + (layout.BW - 5 * layout.scale) / 2;
@@ -4408,7 +4623,7 @@ static void renderBanner(SDL_Renderer* ren, const LayoutCache& layout, AudioSyst
         ch = (char)std::toupper((unsigned char)ch);
         if (ch < 'A' || ch > 'Z') ch = ' ';
         drawPixelText(ren, cxText, bty, std::string(1, ch), layout.scale, 
-                     THEME.banner_text_r, THEME.banner_text_g, THEME.banner_text_b);
+                     themeManager.getTheme().banner_text_r, themeManager.getTheme().banner_text_g, themeManager.getTheme().banner_text_b);
         bty += 9 * layout.scale;
     }
 
@@ -4452,7 +4667,7 @@ static void renderBoard(SDL_Renderer* ren, const GameState& state, const LayoutC
         for (int x = 0; x < COLS; ++x) {
             SDL_Rect r{layout.GX + x * layout.cellBoard, layout.GY + y * layout.cellBoard, 
                       layout.cellBoard - 1, layout.cellBoard - 1};
-            SDL_SetRenderDrawColor(ren, THEME.board_empty_r, THEME.board_empty_g, THEME.board_empty_b, 255);
+            SDL_SetRenderDrawColor(ren, themeManager.getTheme().board_empty_r, themeManager.getTheme().board_empty_g, themeManager.getTheme().board_empty_b, 255);
             SDL_RenderFillRect(ren, &r);
         }
     }
@@ -4483,35 +4698,35 @@ static void renderBoard(SDL_Renderer* ren, const GameState& state, const LayoutC
 static void renderHUD(SDL_Renderer* ren, const GameState& state, const LayoutCache& layout) {
     // Painel (HUD)
     drawRoundedFilled(ren, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 
-                     THEME.panel_fill_r, THEME.panel_fill_g, THEME.panel_fill_b, 255);
+                     themeManager.getTheme().panel_fill_r, themeManager.getTheme().panel_fill_g, themeManager.getTheme().panel_fill_b, 255);
     drawRoundedOutline(ren, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 2, 
-                      THEME.panel_outline_r, THEME.panel_outline_g, THEME.panel_outline_b, THEME.panel_outline_a);
+                      themeManager.getTheme().panel_outline_r, themeManager.getTheme().panel_outline_g, themeManager.getTheme().panel_outline_b, themeManager.getTheme().panel_outline_a);
 
     // HUD textos
     int tx = layout.panelX + 14, ty = layout.panelY + 14;
-    drawPixelText(ren, tx, ty, "SCORE", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 10 * layout.scale;
-    drawPixelText(ren, tx, ty, fmtScore(state.getScoreValue()), layout.scale + 1, THEME.hud_score_r, THEME.hud_score_g, THEME.hud_score_b); ty += 12 * (layout.scale + 1);
-    drawPixelText(ren, tx, ty, "LINES", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
-    drawPixelText(ren, tx, ty, std::to_string(state.getLinesValue()), layout.scale, THEME.hud_lines_r, THEME.hud_lines_g, THEME.hud_lines_b); ty += 10 * layout.scale;
-    drawPixelText(ren, tx, ty, "LEVEL", layout.scale, THEME.hud_label_r, THEME.hud_label_g, THEME.hud_label_b); ty += 8 * layout.scale;
-    drawPixelText(ren, tx, ty, std::to_string(state.getLevelValue()), layout.scale, THEME.hud_level_r, THEME.hud_level_g, THEME.hud_level_b); ty += 10 * layout.scale;
+    drawPixelText(ren, tx, ty, "SCORE", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 10 * layout.scale;
+    drawPixelText(ren, tx, ty, fmtScore(state.getScoreValue()), layout.scale + 1, themeManager.getTheme().hud_score_r, themeManager.getTheme().hud_score_g, themeManager.getTheme().hud_score_b); ty += 12 * (layout.scale + 1);
+    drawPixelText(ren, tx, ty, "LINES", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 8 * layout.scale;
+    drawPixelText(ren, tx, ty, std::to_string(state.getLinesValue()), layout.scale, themeManager.getTheme().hud_lines_r, themeManager.getTheme().hud_lines_g, themeManager.getTheme().hud_lines_b); ty += 10 * layout.scale;
+    drawPixelText(ren, tx, ty, "LEVEL", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 8 * layout.scale;
+    drawPixelText(ren, tx, ty, std::to_string(state.getLevelValue()), layout.scale, themeManager.getTheme().hud_level_r, themeManager.getTheme().hud_level_g, themeManager.getTheme().hud_level_b); ty += 10 * layout.scale;
 
-    // NEXT (quadro PREVIEW_GRID × PREVIEW_GRID)
+    // NEXT (quadro pieceManager.getPreviewGrid() × pieceManager.getPreviewGrid())
     int boxW = layout.panelW - 28;
     int boxH = std::min(layout.panelH - (ty - layout.panelY) - 14, boxW);
     int boxX = layout.panelX + 14;
     int boxY = ty;
 
-    drawRoundedFilled(ren, boxX, boxY, boxW, boxH, 10, THEME.next_fill_r, THEME.next_fill_g, THEME.next_fill_b, 255);
-    drawRoundedOutline(ren, boxX, boxY, boxW, boxH, 10, 2, THEME.next_outline_r, THEME.next_outline_g, THEME.next_outline_b, THEME.next_outline_a);
+    drawRoundedFilled(ren, boxX, boxY, boxW, boxH, 10, themeManager.getTheme().next_fill_r, themeManager.getTheme().next_fill_g, themeManager.getTheme().next_fill_b, 255);
+    drawRoundedOutline(ren, boxX, boxY, boxW, boxH, 10, 2, themeManager.getTheme().next_outline_r, themeManager.getTheme().next_outline_g, themeManager.getTheme().next_outline_b, themeManager.getTheme().next_outline_a);
 
-    drawPixelText(ren, boxX + 10, boxY + 10, "NEXT", layout.scale, THEME.next_label_r, THEME.next_label_g, THEME.next_label_b);
+    drawPixelText(ren, boxX + 10, boxY + 10, "NEXT", layout.scale, themeManager.getTheme().next_label_r, themeManager.getTheme().next_label_g, themeManager.getTheme().next_label_b);
 
     int padIn = 14 + 4 * layout.scale;
     int innerX = boxX + 10, innerY = boxY + padIn;
     int innerW = boxW - 20, innerH = boxH - padIn - 10;
 
-    int gridCols = PREVIEW_GRID, gridRows = PREVIEW_GRID;
+    int gridCols = pieceManager.getPreviewGrid(), gridRows = pieceManager.getPreviewGrid();
     int cellMini = std::min(innerW / gridCols, innerH / gridRows);
     if (cellMini < 1) cellMini = 1;
     if (cellMini > layout.cellBoard) cellMini = layout.cellBoard;
@@ -4525,13 +4740,13 @@ static void renderHUD(SDL_Renderer* ren, const GameState& state, const LayoutCac
         for (int gx = 0; gx < gridCols; ++gx) {
             SDL_Rect q{gridX + gx * cellMini, gridY + gy * cellMini, cellMini - 1, cellMini - 1};
             bool isLight = ((gx + gy) & 1) != 0;
-            if (THEME.next_grid_use_rgb) {
+            if (themeManager.getTheme().next_grid_use_rgb) {
                 if (isLight)
-                    SDL_SetRenderDrawColor(ren, THEME.next_grid_light_r, THEME.next_grid_light_g, THEME.next_grid_light_b, 255);
+                    SDL_SetRenderDrawColor(ren, themeManager.getTheme().next_grid_light_r, themeManager.getTheme().next_grid_light_g, themeManager.getTheme().next_grid_light_b, 255);
                 else
-                    SDL_SetRenderDrawColor(ren, THEME.next_grid_dark_r, THEME.next_grid_dark_g, THEME.next_grid_dark_b, 255);
+                    SDL_SetRenderDrawColor(ren, themeManager.getTheme().next_grid_dark_r, themeManager.getTheme().next_grid_dark_g, themeManager.getTheme().next_grid_dark_b, 255);
             } else {
-                Uint8 v = isLight ? THEME.next_grid_light : THEME.next_grid_dark;
+                Uint8 v = isLight ? themeManager.getTheme().next_grid_light : themeManager.getTheme().next_grid_dark;
                 SDL_SetRenderDrawColor(ren, v, v, v, 255);
             }
             SDL_RenderFillRect(ren, &q);
@@ -4568,13 +4783,13 @@ static void renderOverlay(SDL_Renderer* ren, const GameState& state, const Layou
         int textH = 7 * (layout.scale + 2) + (subText.empty() ? 0 : (8 * layout.scale + 7 * layout.scale));
         int ow = textW + padX * 2, oh = textH + padY * 2;
         int ox = layout.GX + (layout.GW - ow) / 2, oy = layout.GY + (layout.GH - oh) / 2;
-        drawRoundedFilled(ren, ox, oy, ow, oh, 14, THEME.overlay_fill_r, THEME.overlay_fill_g, THEME.overlay_fill_b, THEME.overlay_fill_a);
-        drawRoundedOutline(ren, ox, oy, ow, oh, 14, 2, THEME.overlay_outline_r, THEME.overlay_outline_g, THEME.overlay_outline_b, THEME.overlay_outline_a);
+        drawRoundedFilled(ren, ox, oy, ow, oh, 14, themeManager.getTheme().overlay_fill_r, themeManager.getTheme().overlay_fill_g, themeManager.getTheme().overlay_fill_b, themeManager.getTheme().overlay_fill_a);
+        drawRoundedOutline(ren, ox, oy, ow, oh, 14, 2, themeManager.getTheme().overlay_outline_r, themeManager.getTheme().overlay_outline_g, themeManager.getTheme().overlay_outline_b, themeManager.getTheme().overlay_outline_a);
         int txc = ox + (ow - topW) / 2, tyc = oy + padY;
-        drawPixelTextOutlined(ren, txc, tyc, topText, layout.scale + 2, THEME.overlay_top_r, THEME.overlay_top_g, THEME.overlay_top_b, 0, 0, 0);
+        drawPixelTextOutlined(ren, txc, tyc, topText, layout.scale + 2, themeManager.getTheme().overlay_top_r, themeManager.getTheme().overlay_top_g, themeManager.getTheme().overlay_top_b, 0, 0, 0);
         if (!subText.empty()) {
             int sx = ox + (ow - subW) / 2, sy = tyc + 7 * (layout.scale + 2) + 8 * layout.scale;
-            drawPixelTextOutlined(ren, sx, sy, subText, layout.scale, THEME.overlay_sub_r, THEME.overlay_sub_g, THEME.overlay_sub_b, 0, 0, 0);
+            drawPixelTextOutlined(ren, sx, sy, subText, layout.scale, themeManager.getTheme().overlay_sub_r, themeManager.getTheme().overlay_sub_g, themeManager.getTheme().overlay_sub_b, 0, 0, 0);
         }
     }
 }
