@@ -2,7 +2,9 @@
 
 A modern, customizable falling blocks game inspired by Tetris®, built with C++ and SDL2. Features advanced visual effects, customizable themes, and multiple piece sets.
 
-![DropBlocks Screenshot](dropblocks-screenshot_2025-10-03_02-20-51.bmp)
+**Version 6.12** - Phase 5: Dependency Injection Implementation Complete
+
+![DropBlocks Screenshot](images/screenshot.bmp)
 
 ## ✨ Features
 
@@ -13,6 +15,15 @@ A modern, customizable falling blocks game inspired by Tetris®, built with C++ 
 - **SRS Rotation System**: Super Rotation System with proper kick mechanics
 - **Screenshot Support**: Press F12 to capture screenshots
 - **Cross-Platform**: Works on Windows, Linux, and macOS
+
+### 🏗️ Architecture (v6.12)
+
+- **Dependency Injection**: Complete DI system with lifecycle management
+- **Abstract Interfaces**: Modular design with clear contracts
+- **DependencyContainer**: Advanced container with health monitoring
+- **Service Discovery**: Automatic dependency resolution
+- **Debugging Tools**: Comprehensive service monitoring and validation
+- **Modular Systems**: Audio, Theme, Pieces, Input, and Config systems
 
 ## 🎮 Controls
 
@@ -122,11 +133,33 @@ KICKS.CW = (0,0);(-2,0);(1,0);(-2,-1);(1,2)
 
 ```
 dropblocks/
-├── dropblocks.cpp          # Main game source code
+├── dropblocks.cpp          # Main game source code (v6.12)
 ├── README.md               # This file
+├── images/
+│   └── screenshot.bmp      # Game screenshot
 ├── *.cfg                   # Configuration files
 ├── *.pieces               # Piece set definitions
-└── *.bmp                  # Screenshots
+└── *.bmp                  # Screenshots (F12)
+```
+
+### Architecture Overview
+
+```
+DropBlocks v6.12
+├── DependencyContainer     # Service management
+├── Abstract Interfaces     # System contracts
+│   ├── IAudioSystem       # Audio functionality
+│   ├── IThemeManager      # Theme management
+│   ├── IPieceManager      # Piece management
+│   ├── IInputManager      # Input handling
+│   └── IGameConfig        # Configuration
+├── Concrete Implementations
+│   ├── AudioSystem        # SDL audio implementation
+│   ├── ThemeManager       # Visual theme system
+│   ├── PieceManager       # Piece generation & management
+│   ├── InputManager       # Keyboard/Joystick input
+│   └── ConfigManager      # Configuration loading
+└── GameState              # Main game coordinator
 ```
 
 ### Configuration Files
@@ -165,6 +198,32 @@ dropblocks/
 - **Bag Randomizer**: 7-bag randomizer for fair piece distribution
 - **Level Progression**: Increasing speed and difficulty
 - **Line Clear Scoring**: Points for single, double, triple, and Tetris clears
+
+## 🔧 Technical Features (v6.12)
+
+### Dependency Injection System
+
+- **DependencyContainer**: Advanced container with lifecycle management
+- **Service Registration**: Support for Singleton and Transient lifecycles
+- **Dependency Validation**: Automatic validation of service dependencies
+- **Health Monitoring**: Real-time service health checks
+- **Access Tracking**: Monitor service usage and performance
+
+### Abstract Interfaces
+
+- **IAudioSystem**: Audio functionality contract
+- **IThemeManager**: Theme management contract
+- **IPieceManager**: Piece management contract
+- **IInputManager**: Input handling contract
+- **IGameConfig**: Configuration management contract
+
+### Debugging & Monitoring
+
+- **Service Metadata**: Complete service information tracking
+- **Dependency Graph**: Visual representation of service dependencies
+- **Performance Metrics**: Access counts and timing information
+- **Error Tracking**: Detailed error reporting and recovery
+- **Service Discovery**: Automatic service resolution and validation
 
 ## 🔧 Advanced Configuration
 
@@ -220,6 +279,54 @@ RAND_BAG_SIZE = 7
 - Disable global sweep effects if needed
 - Lower audio quality settings
 
+### Debugging (v6.12)
+
+**Service Health Issues**
+- Use `DependencyContainer::validateAllServices()` to check service health
+- Check `getServiceInfo()` for detailed service information
+- Monitor `getDependencyGraph()` for dependency issues
+
+**Dependency Resolution Errors**
+- Verify all required services are registered
+- Check for circular dependencies in the dependency graph
+- Use `getRegisteredServicesList()` to see available services
+
+**Performance Monitoring**
+- Use `getStats()` to monitor service usage
+- Check access counts and timing information
+- Monitor service lifecycle and health status
+
+## 📋 Changelog
+
+### v6.12 (2025-10-15) - Phase 5: Dependency Injection Implementation Complete
+
+**🏗️ Architecture Improvements**
+- ✅ Complete Dependency Injection system implementation
+- ✅ Abstract interfaces for all major systems (IAudioSystem, IThemeManager, IPieceManager, IInputManager, IGameConfig)
+- ✅ Advanced DependencyContainer with lifecycle management
+- ✅ Service health monitoring and validation
+- ✅ Dependency graph visualization and debugging tools
+
+**🔧 Technical Enhancements**
+- ✅ Service metadata tracking (creation time, access count, health status)
+- ✅ Automatic dependency validation and resolution
+- ✅ Enhanced error reporting with context
+- ✅ Performance monitoring and access tracking
+- ✅ Circular dependency detection and prevention
+
+**🎮 Game Features**
+- ✅ Screenshot functionality (F12 key)
+- ✅ Modular audio system with volume controls
+- ✅ Customizable themes and visual effects
+- ✅ SRS rotation system with proper kick mechanics
+- ✅ Multiple piece sets and randomizers
+
+### Previous Versions
+
+- **v6.11** - Dependency Injection Runtime Fix Complete
+- **v6.10** - Abstract Interfaces Implementation Complete
+- **v6.9** - AudioSystem Modular Refactoring Complete
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit:
@@ -229,6 +336,7 @@ Contributions are welcome! Please feel free to submit:
 - Pull requests
 - New piece sets
 - Theme configurations
+- Architecture improvements
 
 ## 📄 License
 

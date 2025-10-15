@@ -45,9 +45,9 @@
 // TODO: add a configurable countdown timer for use in expositions
 // TODO: check hard drop moving pieces to the right
 // TODO: add piece statistics
-
 // TODO: make regions configurable by position and size
 // TODO: enhance resolution ans screen ratio system
+// TODO: 
 
 #include <SDL2/SDL.h>
 #include <vector>
@@ -58,6 +58,7 @@
 #include <map>
 #include <stdexcept>
 #include <algorithm>
+#include <chrono>
 
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
@@ -238,15 +239,28 @@ public:
     };
 
 private:
+    struct ServiceMetadata {
+        std::string name;
+        std::string typeName;
+        std::vector<std::string> dependencies;
+        std::chrono::steady_clock::time_point createdTime;
+        std::chrono::steady_clock::time_point lastAccessTime;
+        size_t accessCount = 0;
+        bool isHealthy = true;
+        std::string lastError;
+    };
+    
     struct ServiceRegistration {
         std::function<void*()> factory;
         Lifecycle lifecycle;
         void* instance = nullptr;
         bool isInitialized = false;
+        ServiceMetadata metadata;
     };
     
     std::map<std::string, ServiceRegistration> services_;
     std::vector<std::string> resolutionStack_; // For circular dependency detection
+    std::map<std::string, std::vector<std::string>> dependencyGraph_; // For visualization
     
 public:
     DependencyContainer() = default;
@@ -265,15 +279,36 @@ public:
      * @param name Service name/identifier
      * @param factory Factory function to create instance
      * @param lifecycle Singleton or Transient
+     * @param dependencies List of service dependencies
      */
     template<typename T>
-    void registerService(const std::string& name, std::function<T*()> factory, Lifecycle lifecycle = Lifecycle::Singleton) {
+    void registerService(const std::string& name, std::function<T*()> factory, 
+                        Lifecycle lifecycle = Lifecycle::Singleton,
+                        const std::vector<std::string>& dependencies = {}) {
+        auto now = std::chrono::steady_clock::now();
         services_[name] = {
             [factory]() -> void* { return static_cast<void*>(factory()); },
             lifecycle,
             nullptr,
-            false
+            false,
+            {
+                name,
+                typeid(T).name(),
+                dependencies,
+                now,
+                now,
+                0,
+                true,
+                ""
+            }
         };
+        
+        // Update dependency graph
+        for (const auto& dep : dependencies) {
+            dependencyGraph_[name].push_back(dep);
+        }
+        
+        // Service registered successfully
     }
     
     /**
@@ -300,15 +335,25 @@ public:
     T* resolve(const std::string& name) {
         // Check for circular dependencies
         if (std::find(resolutionStack_.begin(), resolutionStack_.end(), name) != resolutionStack_.end()) {
-            throw std::runtime_error("Circular dependency detected: " + name);
+            std::string cycle = name;
+            for (auto it = resolutionStack_.rbegin(); it != resolutionStack_.rend(); ++it) {
+                cycle += " -> " + *it;
+            }
+            throw std::runtime_error("Circular dependency detected: " + cycle);
         }
         
         auto it = services_.find(name);
         if (it == services_.end()) {
-            throw std::runtime_error("Service not registered: " + name);
+            throw std::runtime_error("Service not registered: " + name + 
+                                   ". Available services: " + getRegisteredServicesList());
         }
         
         auto& registration = it->second;
+        auto now = std::chrono::steady_clock::now();
+        
+        // Update access tracking
+        registration.metadata.lastAccessTime = now;
+        registration.metadata.accessCount++;
         
         // Return existing singleton instance
         if (registration.lifecycle == Lifecycle::Singleton && registration.isInitialized) {
@@ -320,6 +365,9 @@ public:
         T* instance = nullptr;
         
         try {
+            // Validate dependencies first
+            validateDependencies(name);
+            
             if (registration.factory) {
                 instance = static_cast<T*>(registration.factory());
             } else if (registration.instance) {
@@ -332,9 +380,16 @@ public:
             if (registration.lifecycle == Lifecycle::Singleton) {
                 registration.instance = static_cast<void*>(instance);
                 registration.isInitialized = true;
+                registration.metadata.createdTime = now;
             }
             
-        } catch (...) {
+            // Mark as healthy
+            registration.metadata.isHealthy = true;
+            registration.metadata.lastError = "";
+            
+        } catch (const std::exception& e) {
+            registration.metadata.isHealthy = false;
+            registration.metadata.lastError = e.what();
             resolutionStack_.pop_back();
             throw;
         }
@@ -382,6 +437,8 @@ public:
         int singletonCount = 0;
         int transientCount = 0;
         int initializedCount = 0;
+        int healthyCount = 0;
+        size_t totalAccessCount = 0;
         
         for (const auto& pair : services_) {
             if (pair.second.lifecycle == Lifecycle::Singleton) {
@@ -392,12 +449,125 @@ public:
             if (pair.second.isInitialized) {
                 initializedCount++;
             }
+            if (pair.second.metadata.isHealthy) {
+                healthyCount++;
+            }
+            totalAccessCount += pair.second.metadata.accessCount;
         }
         
         return "Services: " + std::to_string(services_.size()) + 
                " (Singletons: " + std::to_string(singletonCount) + 
                ", Transients: " + std::to_string(transientCount) + 
-               ", Initialized: " + std::to_string(initializedCount) + ")";
+               ", Initialized: " + std::to_string(initializedCount) + 
+               ", Healthy: " + std::to_string(healthyCount) + 
+               ", Total Access: " + std::to_string(totalAccessCount) + ")";
+    }
+    
+    /**
+     * @brief Get detailed service information
+     * @param name Service name
+     * @return Detailed service info string
+     */
+    std::string getServiceInfo(const std::string& name) const {
+        auto it = services_.find(name);
+        if (it == services_.end()) {
+            return "Service not found: " + name;
+        }
+        
+        const auto& reg = it->second;
+        const auto& meta = reg.metadata;
+        
+        auto now = std::chrono::steady_clock::now();
+        auto age = std::chrono::duration_cast<std::chrono::milliseconds>(now - meta.createdTime).count();
+        auto lastAccess = std::chrono::duration_cast<std::chrono::milliseconds>(now - meta.lastAccessTime).count();
+        
+        return "Service: " + name + 
+               "\n  Type: " + meta.typeName +
+               "\n  Lifecycle: " + (reg.lifecycle == Lifecycle::Singleton ? "Singleton" : "Transient") +
+               "\n  Initialized: " + (reg.isInitialized ? "Yes" : "No") +
+               "\n  Healthy: " + (meta.isHealthy ? "Yes" : "No") +
+               "\n  Access Count: " + std::to_string(meta.accessCount) +
+               "\n  Age: " + std::to_string(age) + "ms" +
+               "\n  Last Access: " + std::to_string(lastAccess) + "ms ago" +
+               "\n  Dependencies: " + (meta.dependencies.empty() ? "None" : join(meta.dependencies, ", ")) +
+               (meta.lastError.empty() ? "" : "\n  Last Error: " + meta.lastError);
+    }
+    
+    /**
+     * @brief Get dependency graph as string
+     * @return Dependency graph visualization
+     */
+    std::string getDependencyGraph() const {
+        std::string result = "Dependency Graph:\n";
+        for (const auto& pair : dependencyGraph_) {
+            result += "  " + pair.first + " -> ";
+            if (pair.second.empty()) {
+                result += "[]\n";
+            } else {
+                result += "[" + join(pair.second, ", ") + "]\n";
+            }
+        }
+        return result;
+    }
+    
+    /**
+     * @brief Validate all services
+     * @return True if all services are valid
+     */
+    bool validateAllServices() const {
+        bool allValid = true;
+        for (const auto& pair : services_) {
+            if (!pair.second.metadata.isHealthy) {
+                // Service is unhealthy - error details in metadata
+                allValid = false;
+            }
+        }
+        return allValid;
+    }
+    
+    /**
+     * @brief Get list of registered service names
+     * @return Comma-separated list of service names
+     */
+    std::string getRegisteredServicesList() const {
+        std::vector<std::string> names;
+        for (const auto& pair : services_) {
+            names.push_back(pair.first);
+        }
+        return join(names, ", ");
+    }
+
+private:
+    /**
+     * @brief Validate dependencies for a service
+     * @param serviceName Service to validate
+     */
+    void validateDependencies(const std::string& serviceName) const {
+        auto it = services_.find(serviceName);
+        if (it == services_.end()) return;
+        
+        const auto& deps = it->second.metadata.dependencies;
+        for (const auto& dep : deps) {
+            if (services_.find(dep) == services_.end()) {
+                throw std::runtime_error("Dependency not found: " + dep + " (required by " + serviceName + ")");
+            }
+        }
+    }
+    
+    /**
+     * @brief Join vector of strings with separator
+     * @param vec Vector of strings
+     * @param sep Separator
+     * @return Joined string
+     */
+    std::string join(const std::vector<std::string>& vec, const std::string& sep) const {
+        if (vec.empty()) return "";
+        
+        std::string result = vec[0];
+        for (size_t i = 1; i < vec.size(); ++i) {
+            result += sep + vec[i];
+        }
+        return result;
     }
 };
 #include <algorithm>
