@@ -1,0 +1,54 @@
+🚀 Testing Complete GameInitializer...
+🚀 Testing Complete GameInitializer...
+VERSION: 6.14 - Phase 6: Main Refactor Polishing
+BUILD: Oct 16 2025 00:57:18
+FEATURES: GameInitializer/GameLoop/GameCleanup - Fullscreen restoration - DI cleanup and stability
+PHASE: Phase Phase 6: Main Refactor Polishing (v6.14)
+[INFO] SDL2 initialized successfully
+[INFO] Audio system initialized successfully
+[WARNING] No joystick/controller found
+[WARNING] No joystick/controller found, continuing with keyboard only
+[INFO] Input system initialized successfully
+[INFO] Config system initialized successfully
+[WARNING] Unknown config key: JOYSTICK_SOFT_DROP_DELAY
+[WARNING] Unknown config key: GAME_SPEED_START_MS
+[WARNING] Unknown config key: GAME_SPEED_MIN_MS
+[WARNING] Unknown config key: GAME_SPEED_ACCELERATION
+[INFO] Setting dependencies for GameState
+[INFO] Dependencies set successfully
+[WARNING] No JoystickInput handler found for configuration
+INFO: Pieces carregado de: default.pieces (OK)
+Pieces: 7, PreviewGrid=6, Randomizer=simple, BagSize=0
+Audio: Master=0.8, SFX=0.7, Ambient=0.2
+[INFO] Game state initialized successfully
+[INFO] Fullscreen window and renderer initialized successfully
+
+========================================
+🎮 DROPBLOCKS 6.14 INICIALIZADO COM SUCESSO! 🎮
+========================================
+✅ SDL2: OK
+✅ Audio: OK
+✅ Input: OK
+✅ Config: OK
+✅ GameState: OK
+✅ Fullscreen Window: OK
+========================================
+🎯 CONTROLES:
+   Teclado: ← → ↓ Z X SPACE P ENTER ESC
+   Joystick: D-pad + B0,B1,B8,B9
+========================================
+🚀 INICIANDO JOGO...
+
+✅ GameInitializer complete test passed!
+
+🔍 INITIALIZATION STATUS:
+✅ SDL2: OK
+✅ Audio: OK
+✅ Input: OK
+✅ Config: OK
+✅ Fullscreen Window: OK
+✅ GameState: OK
+VERSION: 6.14- Phase 6: Main Refactor Polishing
+
+🎉 Initialization completed successfully!
+[INFO] Starting main game loop

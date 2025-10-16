@@ -5,7 +5,7 @@
 
 clear
 
-echo "🚀 Building DropBlocks v7.0 - Phase 7: Unit Tests"
+echo "🚀 Building DropBlocks"
 
 # Navegar para o diretório do projeto
 cd /c/Users/User/Documents/dropblocks
@@ -26,7 +26,7 @@ g++ dropblocks.cpp -o dropblocks.exe $(sdl2-config --cflags --libs) -O2 -std=c++
 # Verificar se a compilação foi bem-sucedida
 if [ $? -eq 0 ]; then
     echo "✅ Compilação concluída com sucesso!"
-    echo "🎮 Executando DropBlocks v7.0..."
+    echo "🎮 Executando DropBlocks..."
     echo "----------------------------------------"
     
     # Executar o jogo

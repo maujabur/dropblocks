@@ -63,9 +63,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "7.0"
-#define DROPBLOCKS_BUILD_INFO "Phase 7: Unit Tests - Foundational Suite"
-#define DROPBLOCKS_FEATURES "DependencyContainer with lifecycle management - GameState refactored for DI - Abstract interfaces with concrete implementations - Complete system decoupling - GameInitializer/GameLoop/GameCleanup - Fullscreen restoration - Unit test scaffold (Catch2), interface fakes, initial specs"
+#define DROPBLOCKS_VERSION "6.14"
+#define DROPBLOCKS_BUILD_INFO "Phase 6: Main Refactor Polishing"
+#define DROPBLOCKS_FEATURES "GameInitializer/GameLoop/GameCleanup - Fullscreen restoration - DI cleanup and stability"
 
 // ===========================
 //   FORWARD DECLARATIONS
@@ -4293,12 +4293,32 @@ public:
     void reset() {
         board_.reset();
         score_.reset();
-        pieces_.reset();
+        // pieces_.reset();  // avoid resetting piece RNG/next during restart; handled explicitly elsewhere
         combo_.reset();
         gameover_ = false;
         paused_ = false;
         lastTick_ = SDL_GetTicks();
     }
+
+private:
+    void restartRound() {
+        // Reset core game state
+        reset();
+        // Re-seed and reset pieces (fresh bag and next)
+        if (pieces_) {
+            pieces_->initializeRandomizer();
+            pieces_->reset();
+        }
+        // Define active and next pieces
+        int first = pieces_ ? pieces_->getNextPiece() : 0;
+        newActive(activePiece_, first);
+        if (pieces_) pieces_->setNextPiece(pieces_->getNextPiece());
+        // Timing and input
+        setLastTick(SDL_GetTicks());
+        if (input_) input_->resetTimers();
+        if (audio_) static_cast<AudioSystem&>(*audio_).playBeep(520.0, 40, 0.15f, false);
+    }
+public:
     
     // Piece update logic
     void updatePiece() {
@@ -4429,7 +4449,7 @@ public:
     // Processar eventos SDL (apenas para quit e screenshot)
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) setRunning(false);
+            if (e.type == SDL_QUIT) { DebugLogger::info("SDL_QUIT received"); setRunning(false); }
     }
     
     // Screenshot (apenas teclado)
@@ -4444,6 +4464,7 @@ public:
     
     // Quit
     if (input_->shouldQuit()) {
+            
             setRunning(false);
     }
     
@@ -4455,11 +4476,12 @@ public:
     
     // Game Over - Restart
         if (isGameOver() && input_->shouldRestart()) {
-            reset();
-            pieces_->initialize();
-        audio_->playBeep(520.0, 40, 0.15f, false);
-        return;
-    }
+            restartRound();
+            return;
+        }
+        else if (!isGameOver() && input_->shouldRestart()) {
+            
+        }
     
     // Controles de jogo (só funcionam quando não pausado e não em game over)
         if (!isPaused() && !isGameOver()) {
@@ -5214,7 +5236,7 @@ public:
         printf("VERSION: %s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
         printf("BUILD: %s %s\n", __DATE__, __TIME__);
         printf("FEATURES: %s\n", DROPBLOCKS_FEATURES);
-        printf("PHASE: Phase 7 - Unit Tests (v7.0)\n");
+        printf("PHASE: Phase %s (v%s)\n", DROPBLOCKS_BUILD_INFO, DROPBLOCKS_VERSION);
         fflush(stdout);
 
         return initializeSDL();
@@ -5359,7 +5381,7 @@ public:
         printf("VERSION: %s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
         printf("BUILD: %s %s\n", __DATE__, __TIME__);
         printf("FEATURES: %s\n", DROPBLOCKS_FEATURES);
-        printf("PHASE: Phase 7 - Unit Tests (v7.0)\n");
+        printf("PHASE: Phase %s (v%s)\n", DROPBLOCKS_BUILD_INFO, DROPBLOCKS_VERSION);
         fflush(stdout);
 
         // Inicialização sequencial
@@ -5856,16 +5878,16 @@ int main(int, char**) {
 
     // Verificar status de inicialização
     printf("\n🔍 INITIALIZATION STATUS:\n");
-    printf("✅ SDL2: %s\n", initializer.isSDLInitialized() ? "OK" : "FAILED");
-    printf("✅ Audio: %s\n", initializer.isAudioInitialized() ? "OK" : "FAILED");
-    printf("✅ Input: %s\n", initializer.isInputInitialized() ? "OK" : "FAILED");
-    printf("✅ Config: %s\n", initializer.isConfigInitialized() ? "OK" : "FAILED");
-    printf("✅ Fullscreen Window: %s\n", initializer.isWindowInitialized() ? "OK" : "FAILED");
-    printf("✅ GameState: %s\n", initializer.isGameStateInitialized() ? "OK" : "FAILED");
+    printf("%s SDL2: %s\n", initializer.isSDLInitialized() ? "✅" : "❌", initializer.isSDLInitialized() ? "OK" : "FAILED");
+    printf("%s Audio: %s\n", initializer.isAudioInitialized() ? "✅" : "❌", initializer.isAudioInitialized() ? "OK" : "FAILED");
+    printf("%s Input: %s\n", initializer.isInputInitialized() ? "✅" : "❌", initializer.isInputInitialized() ? "OK" : "FAILED");
+    printf("%s Config: %s\n", initializer.isConfigInitialized() ? "✅" : "❌", initializer.isConfigInitialized() ? "OK" : "FAILED");
+    printf("%s Fullscreen Window: %s\n", initializer.isWindowInitialized() ? "✅" : "❌", initializer.isWindowInitialized() ? "OK" : "FAILED");
+    printf("%s GameState: %s\n", initializer.isGameStateInitialized() ? "✅" : "❌", initializer.isGameStateInitialized() ? "OK" : "FAILED");
 
     // Configurar render manager
     RenderManager renderManager(ren);
-
+    
     // Adicionar camadas de renderização
     renderManager.addLayer(std::make_unique<BackgroundLayer>());
     renderManager.addLayer(std::make_unique<BannerLayer>(&audio));
@@ -5873,12 +5895,11 @@ int main(int, char**) {
     renderManager.addLayer(std::make_unique<HUDLayer>());
     renderManager.addLayer(std::make_unique<OverlayLayer>());
     renderManager.addLayer(std::make_unique<PostEffectsLayer>(&audio));
-
+    
     // Inicializar randomizador
     initializeRandomizer(state);
 
-    printf("\n🎉 Phase 7 (v7.0) initialization completed successfully!\n");
-    printf("📝 Next step: Add unit test suite files (Catch2, mocks, specs)\n");
+    printf("\n🎉 Initialization completed successfully!\n");
 
     // Loop principal usando GameLoop
     gameLoop.run(state, renderManager, ren);
