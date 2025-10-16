@@ -2,7 +2,7 @@
 
 A modern, customizable falling blocks game inspired by Tetris®, built with C++ and SDL2. Features advanced visual effects, customizable themes, and multiple piece sets.
 
-**Version 6.12** - Phase 5: Dependency Injection Implementation Complete
+**Version 7.0** - Phase 7: Unit Tests - Foundational Suite
 
 ![DropBlocks Screenshot](images/screenshot.bmp)
 
@@ -16,7 +16,7 @@ A modern, customizable falling blocks game inspired by Tetris®, built with C++ 
 - **Screenshot Support**: Press F12 to capture screenshots
 - **Cross-Platform**: Works on Windows, Linux, and macOS
 
-### 🏗️ Architecture (v6.12)
+### 🏗️ Architecture (v7.0)
 
 - **Dependency Injection**: Complete DI system with lifecycle management
 - **Abstract Interfaces**: Modular design with clear contracts
@@ -133,7 +133,7 @@ KICKS.CW = (0,0);(-2,0);(1,0);(-2,-1);(1,2)
 
 ```
 dropblocks/
-├── dropblocks.cpp          # Main game source code (v6.12)
+├── dropblocks.cpp          # Main game source code (v7.0)
 ├── README.md               # This file
 ├── images/
 │   └── screenshot.bmp      # Game screenshot
@@ -145,7 +145,7 @@ dropblocks/
 ### Architecture Overview
 
 ```
-DropBlocks v6.12
+DropBlocks v7.0
 ├── DependencyContainer     # Service management
 ├── Abstract Interfaces     # System contracts
 │   ├── IAudioSystem       # Audio functionality
@@ -199,7 +199,7 @@ DropBlocks v6.12
 - **Level Progression**: Increasing speed and difficulty
 - **Line Clear Scoring**: Points for single, double, triple, and Tetris clears
 
-## 🔧 Technical Features (v6.12)
+## 🔧 Technical Features (v7.0)
 
 ### Dependency Injection System
 
@@ -279,7 +279,7 @@ RAND_BAG_SIZE = 7
 - Disable global sweep effects if needed
 - Lower audio quality settings
 
-### Debugging (v6.12)
+### Debugging (v7.0)
 
 **Service Health Issues**
 - Use `DependencyContainer::validateAllServices()` to check service health
@@ -297,6 +297,18 @@ RAND_BAG_SIZE = 7
 - Monitor service lifecycle and health status
 
 ## 📋 Changelog
+
+### v7.0 (2025-10-16) - Phase 7: Unit Tests - Foundational Suite
+
+**🧪 Testing Foundation**
+- ✅ Unit test scaffold (Catch2 single-header)
+- ✅ Interface fakes planned (Audio, Theme, Pieces, Input, Config)
+- ✅ Initial specs planned (ConfigManager, PieceManager, GameState, InputManager, RenderManager, GameInitializer)
+- ✅ Optional test target via `compile.sh test`
+
+**🎮 Maintained Features**
+- ✅ Fullscreen restoration from Phase 6
+- ✅ GameInitializer/GameLoop/GameCleanup architecture
 
 ### v6.12 (2025-10-15) - Phase 5: Dependency Injection Implementation Complete
 

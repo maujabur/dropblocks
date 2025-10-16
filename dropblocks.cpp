@@ -47,7 +47,7 @@
 // TODO: add piece statistics
 // TODO: make regions configurable by position and size
 // TODO: enhance resolution ans screen ratio system
-// TODO: 
+// TODO: score acoma de 1.000 aparece com um espaço em branco no milhar, tirar o ponto
 
 #include <SDL2/SDL.h>
 #include <vector>
@@ -63,9 +63,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "6.13"
-#define DROPBLOCKS_BUILD_INFO "Phase 6: GameInitializer Basic Implementation Complete"
-#define DROPBLOCKS_FEATURES "DependencyContainer with lifecycle management - GameState refactored for DI - Abstract interfaces with concrete implementations - Complete system decoupling - GameInitializer basic implementation"
+#define DROPBLOCKS_VERSION "7.0"
+#define DROPBLOCKS_BUILD_INFO "Phase 7: Unit Tests - Foundational Suite"
+#define DROPBLOCKS_FEATURES "DependencyContainer with lifecycle management - GameState refactored for DI - Abstract interfaces with concrete implementations - Complete system decoupling - GameInitializer/GameLoop/GameCleanup - Fullscreen restoration - Unit test scaffold (Catch2), interface fakes, initial specs"
 
 // ===========================
 //   FORWARD DECLARATIONS
@@ -5214,7 +5214,7 @@ public:
         printf("VERSION: %s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
         printf("BUILD: %s %s\n", __DATE__, __TIME__);
         printf("FEATURES: %s\n", DROPBLOCKS_FEATURES);
-        printf("PHASE: GameInitializer Basic Implementation (v6.13)\n");
+        printf("PHASE: Phase 7 - Unit Tests (v7.0)\n");
         fflush(stdout);
 
         return initializeSDL();
@@ -5359,7 +5359,7 @@ public:
         printf("VERSION: %s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
         printf("BUILD: %s %s\n", __DATE__, __TIME__);
         printf("FEATURES: %s\n", DROPBLOCKS_FEATURES);
-        printf("PHASE: Complete GameInitializer Test (v6.13)\n");
+        printf("PHASE: Phase 7 - Unit Tests (v7.0)\n");
         fflush(stdout);
 
         // Inicialização sequencial
@@ -5877,8 +5877,8 @@ int main(int, char**) {
     // Inicializar randomizador
     initializeRandomizer(state);
 
-    printf("\n🎉 Complete GameInitializer v6.13 test completed successfully!\n");
-    printf("📝 Next step: Implement GameLoop and GameCleanup classes\n");
+    printf("\n🎉 Phase 7 (v7.0) initialization completed successfully!\n");
+    printf("📝 Next step: Add unit test suite files (Catch2, mocks, specs)\n");
 
     // Loop principal usando GameLoop
     gameLoop.run(state, renderManager, ren);
