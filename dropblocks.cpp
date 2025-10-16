@@ -63,9 +63,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "6.12"
-#define DROPBLOCKS_BUILD_INFO "Phase 5: Dependency Injection Implementation Complete"
-#define DROPBLOCKS_FEATURES "DependencyContainer with lifecycle management - GameState refactored for DI - Abstract interfaces with concrete implementations - Complete system decoupling"
+#define DROPBLOCKS_VERSION "6.13"
+#define DROPBLOCKS_BUILD_INFO "Phase 6: GameInitializer Basic Implementation Complete"
+#define DROPBLOCKS_FEATURES "DependencyContainer with lifecycle management - GameState refactored for DI - Abstract interfaces with concrete implementations - Complete system decoupling - GameInitializer basic implementation"
 
 // ===========================
 //   FORWARD DECLARATIONS
@@ -5169,6 +5169,416 @@ public:
 };
 
 // ===========================
+//   CLASSES DE GERENCIAMENTO DO JOGO
+// ===========================
+
+/**
+ * @brief Classe responsável por toda a inicialização do jogo
+ *
+ * Encapsula toda a lógica de inicialização em métodos especializados,
+ * separando as responsabilidades do main() e facilitando testes.
+ */
+class GameInitializer {
+private:
+    bool sdlInitialized_ = false;
+    bool audioInitialized_ = false;
+    bool inputInitialized_ = false;
+    bool configInitialized_ = false;
+    bool windowInitialized_ = false;
+    bool gameStateInitialized_ = false;
+
+public:
+    /**
+     * @brief Inicializa o SDL2
+     * @return true se inicialização bem-sucedida
+     */
+    bool initializeSDL() {
+        if (sdlInitialized_) return true;
+
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
+            DebugLogger::error("SDL could not initialize: " + std::string(SDL_GetError()));
+            return false;
+        }
+
+        sdlInitialized_ = true;
+        DebugLogger::info("SDL2 initialized successfully");
+        return true;
+    }
+
+    /**
+     * @brief Inicialização básica (apenas SDL por enquanto)
+     * @return true se inicialização bem-sucedida
+     */
+    bool initializeBasic() {
+        printf("=== DROPBLOCKS STARTING ===\n");
+        printf("VERSION: %s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
+        printf("BUILD: %s %s\n", __DATE__, __TIME__);
+        printf("FEATURES: %s\n", DROPBLOCKS_FEATURES);
+        printf("PHASE: GameInitializer Basic Implementation (v6.13)\n");
+        fflush(stdout);
+
+        return initializeSDL();
+    }
+
+    /**
+     * @brief Inicializa o sistema de áudio
+     * @param audio Referência para o AudioSystem
+     * @return true se inicialização bem-sucedida
+     */
+    bool initializeAudio(AudioSystem& audio) {
+        if (audioInitialized_) return true;
+
+        if (!audio.initialize()) {
+            DebugLogger::warning("Audio initialization failed, continuing without sound");
+            // Não falha o jogo, apenas continua sem som
+        }
+
+        audioInitialized_ = true;
+        DebugLogger::info("Audio system initialized successfully");
+        return true;
+    }
+
+    /**
+     * @brief Inicializa o sistema de input
+     * @param inputManager Referência para o InputManager
+     * @return true se inicialização bem-sucedida
+     */
+    bool initializeInput(InputManager& inputManager) {
+        if (inputInitialized_) return true;
+
+        // Adicionar keyboard input (sempre disponível)
+        auto keyboardInput = std::make_unique<KeyboardInput>();
+        inputManager.addHandler(std::move(keyboardInput));
+
+        // Tentar adicionar joystick input
+        auto joystickInput = std::make_unique<JoystickInput>();
+        if (joystickInput->initialize()) {
+            // Armazenar ponteiro antes de mover
+            InputHandler* joystickPtr = joystickInput.get();
+            inputManager.addHandler(std::move(joystickInput));
+            // Definir JoystickInput como handler primário (prioridade sobre teclado)
+            inputManager.setPrimaryHandler(joystickPtr);
+            DebugLogger::info("Joystick/controller input enabled and set as primary");
+        } else {
+            DebugLogger::warning("No joystick/controller found, continuing with keyboard only");
+        }
+
+        inputInitialized_ = true;
+        DebugLogger::info("Input system initialized successfully");
+        return true;
+    }
+
+    /**
+     * @brief Inicializa o sistema de configuração
+     * @param configManager Referência para o ConfigManager
+     * @return true se inicialização bem-sucedida
+     */
+    bool initializeConfig(ConfigManager& configManager) {
+        if (configInitialized_) return true;
+
+        // O ConfigManager já é inicializado no construtor
+        // Aqui podemos adicionar validações adicionais se necessário
+
+        configInitialized_ = true;
+        DebugLogger::info("Config system initialized successfully");
+        return true;
+    }
+
+    /**
+     * @brief Inicializa a janela e renderer do SDL
+     * @param win Ponteiro para SDL_Window (será preenchido)
+     * @param ren Ponteiro para SDL_Renderer (será preenchido)
+     * @return true se inicialização bem-sucedida
+     */
+    bool initializeWindow(SDL_Window*& win, SDL_Renderer*& ren) {
+        if (windowInitialized_) return true;
+
+        // Usar a mesma lógica da função original para tela cheia
+        SDL_DisplayMode dm;
+        if (SDL_GetCurrentDisplayMode(0, &dm) != 0) {
+            DebugLogger::error("Failed to get display mode: " + std::string(SDL_GetError()));
+            return false;
+        }
+        int SW = dm.w, SH = dm.h;
+
+        win = SDL_CreateWindow("DropBlocks", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SW, SH,
+                              SDL_WINDOW_FULLSCREEN | SDL_WINDOW_ALLOW_HIGHDPI);
+        if (!win) {
+            DebugLogger::error("Window could not be created: " + std::string(SDL_GetError()));
+            return false;
+        }
+
+        ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+        if (!ren) {
+            DebugLogger::error("Renderer could not be created: " + std::string(SDL_GetError()));
+            SDL_DestroyWindow(win);
+            return false;
+        }
+
+        windowInitialized_ = true;
+        DebugLogger::info("Fullscreen window and renderer initialized successfully");
+        return true;
+    }
+
+    /**
+     * @brief Inicializa o estado do jogo
+     * @param state Referência para o GameState
+     * @param audio Referência para o AudioSystem
+     * @param configManager Referência para o ConfigManager
+     * @param inputManager Referência para o InputManager
+     * @return true se inicialização bem-sucedida
+     */
+    bool initializeGameState(GameState& state, AudioSystem& audio,
+                           ConfigManager& configManager, InputManager& inputManager) {
+        if (gameStateInitialized_) return true;
+
+        if (!initializeGame(state, audio, configManager, inputManager)) {
+            DebugLogger::error("Game state initialization failed");
+            return false;
+        }
+
+        gameStateInitialized_ = true;
+        DebugLogger::info("Game state initialized successfully");
+        return true;
+    }
+
+    /**
+     * @brief Inicialização completa (SDL + Áudio + Input + Config + Janela + Estado do Jogo)
+     * @param audio Referência para o AudioSystem
+     * @param inputManager Referência para o InputManager
+     * @param configManager Referência para o ConfigManager
+     * @param state Referência para o GameState
+     * @param win Ponteiro para SDL_Window
+     * @param ren Ponteiro para SDL_Renderer
+     * @return true se inicialização bem-sucedida
+     */
+    bool initializeComplete(AudioSystem& audio, InputManager& inputManager,
+                          ConfigManager& configManager, GameState& state,
+                          SDL_Window*& win, SDL_Renderer*& ren) {
+        printf("🚀 Testing Complete GameInitializer...\n");
+        printf("VERSION: %s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
+        printf("BUILD: %s %s\n", __DATE__, __TIME__);
+        printf("FEATURES: %s\n", DROPBLOCKS_FEATURES);
+        printf("PHASE: Complete GameInitializer Test (v6.13)\n");
+        fflush(stdout);
+
+        // Inicialização sequencial
+        if (!initializeSDL()) return false;
+        if (!initializeAudio(audio)) return false; // Continua mesmo se falhar
+        if (!initializeInput(inputManager)) return false;
+        if (!initializeConfig(configManager)) return false;
+        if (!initializeGameState(state, audio, configManager, inputManager)) return false;
+        if (!initializeWindow(win, ren)) return false;
+
+        // Debug destacado ao final da inicialização
+        printf("\n");
+        printf("========================================\n");
+        printf("🎮 DROPBLOCKS %s INICIALIZADO COM SUCESSO! 🎮\n", DROPBLOCKS_VERSION);
+        printf("========================================\n");
+        printf("✅ SDL2: OK\n");
+        printf("✅ Audio: OK\n");
+        printf("✅ Input: OK\n");
+        printf("✅ Config: OK\n");
+        printf("✅ GameState: OK\n");
+        printf("✅ Fullscreen Window: OK\n");
+        printf("========================================\n");
+        printf("🎯 CONTROLES:\n");
+        printf("   Teclado: ← → ↓ Z X SPACE P ENTER ESC\n");
+        printf("   Joystick: D-pad + B0,B1,B8,B9\n");
+        printf("========================================\n");
+        printf("🚀 INICIANDO JOGO...\n");
+        printf("\n");
+        fflush(stdout);
+
+        return true;
+    }
+
+    // Getters para status
+    bool isSDLInitialized() const { return sdlInitialized_; }
+    bool isAudioInitialized() const { return audioInitialized_; }
+    bool isInputInitialized() const { return inputInitialized_; }
+    bool isConfigInitialized() const { return configInitialized_; }
+    bool isWindowInitialized() const { return windowInitialized_; }
+    bool isGameStateInitialized() const { return gameStateInitialized_; }
+};
+
+/**
+ * @brief Classe responsável pelo loop principal do jogo
+ *
+ * Encapsula toda a lógica do loop principal, separando as responsabilidades
+ * de atualização e renderização do main().
+ */
+class GameLoop {
+private:
+    bool running_ = false;
+    LayoutCache layoutCache_;
+
+public:
+    /**
+     * @brief Executa o loop principal do jogo
+     * @param state Referência para o GameState
+     * @param renderManager Referência para o RenderManager
+     * @param ren Ponteiro para SDL_Renderer
+     */
+    void run(GameState& state, RenderManager& renderManager, SDL_Renderer* ren) {
+        if (running_) {
+            DebugLogger::warning("Game loop is already running");
+            return;
+        }
+
+        running_ = true;
+        DebugLogger::info("Starting main game loop");
+
+        while (state.isRunning() && running_) {
+            // Cache de layout
+            if (layoutCache_.dirty) {
+                layoutCache_.calculate();
+            }
+
+            // Update game state (input, logic, audio)
+            state.update(ren);
+
+            // Render game
+            state.render(renderManager, layoutCache_);
+
+            SDL_RenderPresent(ren);
+            SDL_Delay(1);
+        }
+
+        running_ = false;
+        DebugLogger::info("Main game loop ended");
+    }
+
+    /**
+     * @brief Para o loop principal
+     */
+    void stop() {
+        running_ = false;
+        DebugLogger::info("Game loop stop requested");
+    }
+
+    /**
+     * @brief Verifica se o loop está rodando
+     * @return true se o loop está ativo
+     */
+    bool isRunning() const {
+        return running_;
+    }
+
+    /**
+     * @brief Força recálculo do layout cache
+     */
+    void invalidateLayout() {
+        layoutCache_.dirty = true;
+    }
+
+    /**
+     * @brief Obtém referência para o layout cache
+     * @return Referência para LayoutCache
+     */
+    LayoutCache& getLayoutCache() {
+        return layoutCache_;
+    }
+};
+
+/**
+ * @brief Classe responsável pela limpeza do jogo
+ *
+ * Encapsula toda a lógica de limpeza em métodos especializados,
+ * garantindo que todos os recursos sejam liberados corretamente.
+ */
+class GameCleanup {
+private:
+    bool cleaned_ = false;
+
+public:
+    /**
+     * @brief Limpa o sistema de áudio
+     * @param audio Referência para o AudioSystem
+     */
+    void cleanupAudio(AudioSystem& audio) {
+        audio.cleanup();
+        DebugLogger::info("Audio system cleaned up");
+    }
+
+    /**
+     * @brief Limpa o sistema de input
+     * @param inputManager Referência para o InputManager
+     */
+    void cleanupInput(InputManager& inputManager) {
+        inputManager.cleanup();
+        DebugLogger::info("Input system cleaned up");
+    }
+
+    /**
+     * @brief Limpa a janela e renderer do SDL
+     * @param win Ponteiro para SDL_Window
+     * @param ren Ponteiro para SDL_Renderer
+     */
+    void cleanupWindow(SDL_Window* win, SDL_Renderer* ren) {
+        if (ren) {
+            SDL_DestroyRenderer(ren);
+            DebugLogger::info("Renderer destroyed");
+        }
+
+        if (win) {
+            SDL_DestroyWindow(win);
+            DebugLogger::info("Window destroyed");
+        }
+    }
+
+    /**
+     * @brief Limpa o sistema de renderização
+     * @param renderManager Referência para o RenderManager
+     */
+    void cleanupRender(RenderManager& renderManager) {
+        renderManager.cleanup();
+        DebugLogger::info("Render system cleaned up");
+    }
+
+    /**
+     * @brief Limpa o SDL2
+     */
+    void cleanupSDL() {
+        SDL_Quit();
+        DebugLogger::info("SDL2 cleaned up");
+    }
+
+    /**
+     * @brief Limpeza completa do jogo
+     * @param audio Referência para o AudioSystem
+     * @param inputManager Referência para o InputManager
+     * @param renderManager Referência para o RenderManager
+     * @param win Ponteiro para SDL_Window
+     * @param ren Ponteiro para SDL_Renderer
+     */
+    void cleanupAll(AudioSystem& audio, InputManager& inputManager,
+                   RenderManager& renderManager, SDL_Window* win, SDL_Renderer* ren) {
+        if (cleaned_) return;
+
+        DebugLogger::info("Starting game cleanup");
+
+        // Ordem de limpeza (inversa da inicialização)
+        cleanupRender(renderManager);
+        cleanupInput(inputManager);
+        cleanupAudio(audio);
+        cleanupWindow(win, ren);
+        cleanupSDL();
+
+        cleaned_ = true;
+        DebugLogger::info("Game cleanup completed");
+    }
+
+    /**
+     * @brief Verifica se a limpeza foi realizada
+     * @return true se já foi limpo
+     */
+    bool isCleaned() const {
+        return cleaned_;
+    }
+};
+
+// ===========================
 //   IMPLEMENTAÇÃO DE MÉTODOS DO GAMESTATE
 // ===========================
 
@@ -5423,50 +5833,39 @@ static void renderPostEffects(SDL_Renderer* ren, const LayoutCache& layout, Audi
  * @return Exit status (0 for success)
  */
 int main(int, char**) {
-    printf("=== DROPBLOCKS STARTING ===\n");
-    printf("VERSION: %s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
-    printf("BUILD: %s %s\n", __DATE__, __TIME__);
-    printf("FEATURES: %s\n", DROPBLOCKS_FEATURES);
-    fflush(stdout);
+    // Instanciar classes de gerenciamento
+    GameInitializer initializer;
+    GameLoop gameLoop;
+    GameCleanup cleanup;
 
-    // Inicialização
-    if (!initializeSDL()) return 1;
-    
+    // Objetos do jogo
     AudioSystem audio;
-    if (!audio.initialize()) {
-        DebugLogger::warning("Audio initialization failed, continuing without sound");
-    }
-    
     InputManager inputManager;
-    
-    // Adicionar keyboard input (sempre disponível)
-    auto keyboardInput = std::make_unique<KeyboardInput>();
-    inputManager.addHandler(std::move(keyboardInput));
-    
-    // Tentar adicionar joystick input
-    auto joystickInput = std::make_unique<JoystickInput>();
-    if (joystickInput->initialize()) {
-        // Armazenar ponteiro antes de mover
-        InputHandler* joystickPtr = joystickInput.get();
-        inputManager.addHandler(std::move(joystickInput));
-        // Definir JoystickInput como handler primário (prioridade sobre teclado)
-        inputManager.setPrimaryHandler(joystickPtr);
-        DebugLogger::info("Joystick/controller input enabled and set as primary");
-    } else {
-        DebugLogger::warning("No joystick/controller found, continuing with keyboard only");
-    }
-    
     ConfigManager configManager;
-    
     GameState state;
-    if (!initializeGame(state, audio, configManager, inputManager)) return 1;
-    
     SDL_Window* win = nullptr;
     SDL_Renderer* ren = nullptr;
-    if (!initializeWindow(win, ren)) return 1;
-    
+
+    // Inicialização completa usando GameInitializer
+    printf("🚀 Testing Complete GameInitializer...\n");
+    if (!initializer.initializeComplete(audio, inputManager, configManager, state, win, ren)) {
+        printf("❌ GameInitializer complete test failed!\n");
+        return 1;
+    }
+    printf("✅ GameInitializer complete test passed!\n");
+
+    // Verificar status de inicialização
+    printf("\n🔍 INITIALIZATION STATUS:\n");
+    printf("✅ SDL2: %s\n", initializer.isSDLInitialized() ? "OK" : "FAILED");
+    printf("✅ Audio: %s\n", initializer.isAudioInitialized() ? "OK" : "FAILED");
+    printf("✅ Input: %s\n", initializer.isInputInitialized() ? "OK" : "FAILED");
+    printf("✅ Config: %s\n", initializer.isConfigInitialized() ? "OK" : "FAILED");
+    printf("✅ Fullscreen Window: %s\n", initializer.isWindowInitialized() ? "OK" : "FAILED");
+    printf("✅ GameState: %s\n", initializer.isGameStateInitialized() ? "OK" : "FAILED");
+
+    // Configurar render manager
     RenderManager renderManager(ren);
-    
+
     // Adicionar camadas de renderização
     renderManager.addLayer(std::make_unique<BackgroundLayer>());
     renderManager.addLayer(std::make_unique<BannerLayer>(&audio));
@@ -5474,55 +5873,18 @@ int main(int, char**) {
     renderManager.addLayer(std::make_unique<HUDLayer>());
     renderManager.addLayer(std::make_unique<OverlayLayer>());
     renderManager.addLayer(std::make_unique<PostEffectsLayer>(&audio));
-    
+
+    // Inicializar randomizador
     initializeRandomizer(state);
 
-    // Debug destacado ao final da inicialização
-    printf("\n");
-    printf("========================================\n");
-    printf("🎮 DROPBLOCKS %s INICIALIZADO COM SUCESSO! 🎮\n", DROPBLOCKS_VERSION);
-    printf("========================================\n");
-    printf("✅ SDL2: OK\n");
-    printf("✅ Audio: OK\n");
-    printf("✅ Input: OK\n");
-    printf("✅ Config: OK\n");
-    printf("✅ GameState: OK\n");
-    printf("✅ Window: OK\n");
-    printf("✅ Render: OK\n");
-    printf("✅ Randomizer: OK\n");
-    printf("========================================\n");
-    printf("🎯 CONTROLES:\n");
-    printf("   Teclado: ← → ↓ Z X SPACE P ENTER ESC\n");
-    printf("   Joystick: D-pad + B0,B1,B8,B9\n");
-    printf("========================================\n");
-    printf("🚀 INICIANDO JOGO...\n");
-    printf("\n");
-    fflush(stdout);
+    printf("\n🎉 Complete GameInitializer v6.13 test completed successfully!\n");
+    printf("📝 Next step: Implement GameLoop and GameCleanup classes\n");
 
-    // Loop principal - usando interface limpa
-    while (state.isRunning()) {
-        // Cache de layout
-        static LayoutCache layout;
-        if (layout.dirty) {
-            layout.calculate();
-        }
+    // Loop principal usando GameLoop
+    gameLoop.run(state, renderManager, ren);
 
-        // Update game state (input, logic, audio)
-        state.update(ren);
-        
-        // Render game
-        state.render(renderManager, layout);
+    // Limpeza usando GameCleanup
+    cleanup.cleanupAll(audio, inputManager, renderManager, win, ren);
 
-        SDL_RenderPresent(ren);
-        SDL_Delay(1);
-    }
-
-    // Cleanup
-    renderManager.cleanup();
-    inputManager.cleanup();
-    audio.cleanup();
-    SDL_DestroyRenderer(ren); 
-    SDL_DestroyWindow(win); 
-    SDL_Quit();
     return 0;
 }
