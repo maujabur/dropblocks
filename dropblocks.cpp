@@ -50,27 +50,38 @@
 #include "include/game/Mechanics.hpp"
 #include "include/app/GameTypes.hpp"
 #include "include/app/ComboSystem.hpp"
+#include "include/app/GameBoard.hpp"
+#include "include/app/ScoreSystem.hpp"
+#include "include/app/GameState.hpp"
+#include "include/app/GameHelpers.hpp"
+#include "include/ConfigTypes.hpp"
+#include "include/util/UiUtil.hpp"
+
+// STL
 #include <vector>
 #include <string>
 #include <ctime>
 #include <cstdlib>
 #include <functional>
 #include <map>
-#include "include/ConfigTypes.hpp"
-#include "include/util/UiUtil.hpp"
-#include "include/app/GameBoard.hpp"
-#include "include/app/ScoreSystem.hpp"
-#include "include/app/GameState.hpp"
 #include <stdexcept>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cctype>
+#include <cstring>
+#include <fstream>
+#include <sstream>
+#include <random>
+#include <array>
+#include <memory>
 
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "6.20"
-#define DROPBLOCKS_BUILD_INFO "Phase 11: GameState + core systems modular"
-#define DROPBLOCKS_FEATURES "GameState, GameBoard, ScoreSystem, Mechanics extracted to modules"
+#define DROPBLOCKS_VERSION "6.21"
+#define DROPBLOCKS_BUILD_INFO "Phase 12: DI container + helpers modular"
+#define DROPBLOCKS_FEATURES "DependencyContainer, GameHelpers, LayoutHelpers extracted; includes organized"
 
 // ===========================
 //   FORWARD DECLARATIONS
@@ -87,365 +98,13 @@ struct GameConfig;
 
 // Use canonical interfaces
 #include "include/Interfaces.hpp"
+#include "include/di/DependencyContainer.hpp"
 
 // ===========================
 //   DEPENDENCY INJECTION
 // ===========================
 
-/**
- * @brief Dependency injection container
- * 
- * Manages dependency registration and resolution with lifecycle support
- */
-class DependencyContainer {
-public:
-    enum class Lifecycle {
-        Singleton,  // Single instance per container
-        Transient   // New instance per resolution
-    };
-
-private:
-    struct ServiceMetadata {
-        std::string name;
-        std::string typeName;
-        std::vector<std::string> dependencies;
-        std::chrono::steady_clock::time_point createdTime;
-        std::chrono::steady_clock::time_point lastAccessTime;
-        size_t accessCount = 0;
-        bool isHealthy = true;
-        std::string lastError;
-    };
-    
-    struct ServiceRegistration {
-        std::function<void*()> factory;
-        Lifecycle lifecycle;
-        void* instance = nullptr;
-        bool isInitialized = false;
-        ServiceMetadata metadata;
-    };
-    
-    std::map<std::string, ServiceRegistration> services_;
-    std::vector<std::string> resolutionStack_; // For circular dependency detection
-    std::map<std::string, std::vector<std::string>> dependencyGraph_; // For visualization
-    
-public:
-    DependencyContainer() = default;
-    ~DependencyContainer() {
-        clear();
-    }
-    
-    // Non-copyable, non-movable
-    DependencyContainer(const DependencyContainer&) = delete;
-    DependencyContainer& operator=(const DependencyContainer&) = delete;
-    DependencyContainer(DependencyContainer&&) = delete;
-    DependencyContainer& operator=(DependencyContainer&&) = delete;
-    
-    /**
-     * @brief Register a service with factory function
-     * @param name Service name/identifier
-     * @param factory Factory function to create instance
-     * @param lifecycle Singleton or Transient
-     * @param dependencies List of service dependencies
-     */
-    template<typename T>
-    void registerService(const std::string& name, std::function<T*()> factory, 
-                        Lifecycle lifecycle = Lifecycle::Singleton,
-                        const std::vector<std::string>& dependencies = {}) {
-        auto now = std::chrono::steady_clock::now();
-        services_[name] = {
-            [factory]() -> void* { return static_cast<void*>(factory()); },
-            lifecycle,
-            nullptr,
-            false,
-            {
-                name,
-                typeid(T).name(),
-                dependencies,
-                now,
-                now,
-                0,
-                true,
-                ""
-            }
-        };
-        
-        // Update dependency graph
-        for (const auto& dep : dependencies) {
-            dependencyGraph_[name].push_back(dep);
-        }
-        
-        // Service registered successfully
-    }
-    
-    /**
-     * @brief Register a singleton instance
-     * @param name Service name/identifier
-     * @param instance Pre-created instance
-     */
-    template<typename T>
-    void registerInstance(const std::string& name, T* instance) {
-        services_[name] = {
-            nullptr,
-            Lifecycle::Singleton,
-            static_cast<void*>(instance),
-            true
-        };
-    }
-    
-    /**
-     * @brief Resolve a service by name
-     * @param name Service name/identifier
-     * @return Pointer to service instance
-     */
-    template<typename T>
-    T* resolve(const std::string& name) {
-        // Check for circular dependencies
-        if (std::find(resolutionStack_.begin(), resolutionStack_.end(), name) != resolutionStack_.end()) {
-            std::string cycle = name;
-            for (auto it = resolutionStack_.rbegin(); it != resolutionStack_.rend(); ++it) {
-                cycle += " -> " + *it;
-            }
-            throw std::runtime_error("Circular dependency detected: " + cycle);
-        }
-        
-        auto it = services_.find(name);
-        if (it == services_.end()) {
-            throw std::runtime_error("Service not registered: " + name + 
-                                   ". Available services: " + getRegisteredServicesList());
-        }
-        
-        auto& registration = it->second;
-        auto now = std::chrono::steady_clock::now();
-        
-        // Update access tracking
-        registration.metadata.lastAccessTime = now;
-        registration.metadata.accessCount++;
-        
-        // Return existing singleton instance
-        if (registration.lifecycle == Lifecycle::Singleton && registration.isInitialized) {
-            return static_cast<T*>(registration.instance);
-        }
-        
-        // Create new instance
-        resolutionStack_.push_back(name);
-        T* instance = nullptr;
-        
-        try {
-            // Validate dependencies first
-            validateDependencies(name);
-            
-            if (registration.factory) {
-                instance = static_cast<T*>(registration.factory());
-            } else if (registration.instance) {
-                instance = static_cast<T*>(registration.instance);
-            } else {
-                throw std::runtime_error("No factory or instance available for: " + name);
-            }
-            
-            // Store singleton instance
-            if (registration.lifecycle == Lifecycle::Singleton) {
-                registration.instance = static_cast<void*>(instance);
-                registration.isInitialized = true;
-                registration.metadata.createdTime = now;
-            }
-            
-            // Mark as healthy
-            registration.metadata.isHealthy = true;
-            registration.metadata.lastError = "";
-            
-        } catch (const std::exception& e) {
-            registration.metadata.isHealthy = false;
-            registration.metadata.lastError = e.what();
-            resolutionStack_.pop_back();
-            throw;
-        }
-        
-        resolutionStack_.pop_back();
-        return instance;
-    }
-    
-    /**
-     * @brief Check if service is registered
-     * @param name Service name/identifier
-     * @return True if registered
-     */
-    bool isRegistered(const std::string& name) const {
-        return services_.find(name) != services_.end();
-    }
-    
-    /**
-     * @brief Get all registered service names
-     * @return Vector of service names
-     */
-    std::vector<std::string> getRegisteredServices() const {
-        std::vector<std::string> names;
-        for (const auto& pair : services_) {
-            names.push_back(pair.first);
-        }
-        return names;
-    }
-    
-    /**
-     * @brief Clear all services and instances
-     */
-    void clear() {
-        // Note: We don't delete instances here as they might be managed elsewhere
-        // This is a design choice - the container doesn't own the instances
-        services_.clear();
-        resolutionStack_.clear();
-    }
-    
-    /**
-     * @brief Get container statistics
-     * @return String with registration info
-     */
-    std::string getStats() const {
-        int singletonCount = 0;
-        int transientCount = 0;
-        int initializedCount = 0;
-        int healthyCount = 0;
-        size_t totalAccessCount = 0;
-        
-        for (const auto& pair : services_) {
-            if (pair.second.lifecycle == Lifecycle::Singleton) {
-                singletonCount++;
-            } else {
-                transientCount++;
-            }
-            if (pair.second.isInitialized) {
-                initializedCount++;
-            }
-            if (pair.second.metadata.isHealthy) {
-                healthyCount++;
-            }
-            totalAccessCount += pair.second.metadata.accessCount;
-        }
-        
-        return "Services: " + std::to_string(services_.size()) + 
-               " (Singletons: " + std::to_string(singletonCount) + 
-               ", Transients: " + std::to_string(transientCount) + 
-               ", Initialized: " + std::to_string(initializedCount) + 
-               ", Healthy: " + std::to_string(healthyCount) + 
-               ", Total Access: " + std::to_string(totalAccessCount) + ")";
-    }
-    
-    /**
-     * @brief Get detailed service information
-     * @param name Service name
-     * @return Detailed service info string
-     */
-    std::string getServiceInfo(const std::string& name) const {
-        auto it = services_.find(name);
-        if (it == services_.end()) {
-            return "Service not found: " + name;
-        }
-        
-        const auto& reg = it->second;
-        const auto& meta = reg.metadata;
-        
-        auto now = std::chrono::steady_clock::now();
-        auto age = std::chrono::duration_cast<std::chrono::milliseconds>(now - meta.createdTime).count();
-        auto lastAccess = std::chrono::duration_cast<std::chrono::milliseconds>(now - meta.lastAccessTime).count();
-        
-        return "Service: " + name + 
-               "\n  Type: " + meta.typeName +
-               "\n  Lifecycle: " + (reg.lifecycle == Lifecycle::Singleton ? "Singleton" : "Transient") +
-               "\n  Initialized: " + (reg.isInitialized ? "Yes" : "No") +
-               "\n  Healthy: " + (meta.isHealthy ? "Yes" : "No") +
-               "\n  Access Count: " + std::to_string(meta.accessCount) +
-               "\n  Age: " + std::to_string(age) + "ms" +
-               "\n  Last Access: " + std::to_string(lastAccess) + "ms ago" +
-               "\n  Dependencies: " + (meta.dependencies.empty() ? "None" : join(meta.dependencies, ", ")) +
-               (meta.lastError.empty() ? "" : "\n  Last Error: " + meta.lastError);
-    }
-    
-    /**
-     * @brief Get dependency graph as string
-     * @return Dependency graph visualization
-     */
-    std::string getDependencyGraph() const {
-        std::string result = "Dependency Graph:\n";
-        for (const auto& pair : dependencyGraph_) {
-            result += "  " + pair.first + " -> ";
-            if (pair.second.empty()) {
-                result += "[]\n";
-            } else {
-                result += "[" + join(pair.second, ", ") + "]\n";
-            }
-        }
-        return result;
-    }
-    
-    /**
-     * @brief Validate all services
-     * @return True if all services are valid
-     */
-    bool validateAllServices() const {
-        bool allValid = true;
-        for (const auto& pair : services_) {
-            if (!pair.second.metadata.isHealthy) {
-                // Service is unhealthy - error details in metadata
-                allValid = false;
-            }
-        }
-        return allValid;
-    }
-    
-    /**
-     * @brief Get list of registered service names
-     * @return Comma-separated list of service names
-     */
-    std::string getRegisteredServicesList() const {
-        std::vector<std::string> names;
-        for (const auto& pair : services_) {
-            names.push_back(pair.first);
-        }
-        return join(names, ", ");
-    }
-
-private:
-    /**
-     * @brief Validate dependencies for a service
-     * @param serviceName Service to validate
-     */
-    void validateDependencies(const std::string& serviceName) const {
-        auto it = services_.find(serviceName);
-        if (it == services_.end()) return;
-        
-        const auto& deps = it->second.metadata.dependencies;
-        for (const auto& dep : deps) {
-            if (services_.find(dep) == services_.end()) {
-                throw std::runtime_error("Dependency not found: " + dep + " (required by " + serviceName + ")");
-            }
-        }
-    }
-    
-    /**
-     * @brief Join vector of strings with separator
-     * @param vec Vector of strings
-     * @param sep Separator
-     * @return Joined string
-     */
-    std::string join(const std::vector<std::string>& vec, const std::string& sep) const {
-        if (vec.empty()) return "";
-        
-        std::string result = vec[0];
-        for (size_t i = 1; i < vec.size(); ++i) {
-            result += sep + vec[i];
-        }
-        return result;
-    }
-};
-#include <algorithm>
-#include <cmath>
-#include <cctype>
-#include <cstring>
-#include <fstream>
-#include <sstream>
-#include <random>
-#include <array>
-#include <memory>
-#include <map>
+/* DependencyContainer moved to include/di/DependencyContainer.hpp and src/di/DependencyContainer.cpp */
 
 // DebugLogger moved to include/DebugLogger.hpp and src/DebugLogger.cpp
 
@@ -505,10 +164,10 @@ private:
 // ===========================
 
 int   ROUNDED_PANELS = 1;           // 1 = arredondado; 0 = retângulo (synced from VisualConfig.layout)
-static int   HUD_FIXED_SCALE   = 6;        // escala fixa do HUD
+int   HUD_FIXED_SCALE   = 6;        // escala fixa do HUD
 std::string TITLE_TEXT  = "---H A C K T R I S";// texto vertical (A–Z e espaço)
-static int   GAP1_SCALE        = 10;       // banner ↔ tabuleiro (x scale)
-static int   GAP2_SCALE        = 10;       // tabuleiro ↔ painel  (x scale)
+int   GAP1_SCALE        = 10;       // banner ↔ tabuleiro (x scale)
+int   GAP2_SCALE        = 10;       // tabuleiro ↔ painel  (x scale)
 
 // Deprecated globals (replaced by VisualEffectsView bridge); kept only to satisfy legacy code paths if any
 /* removed legacy visual globals; use db_getVisualEffects() instead */
@@ -551,7 +210,7 @@ const int COLS = 10;
 /** @brief Number of rows in the game board */
 const int ROWS = 20;
 /** @brief Border size around the game board */
-static const int BORDER = 10;
+int BORDER = 10;
 /** @brief Initial game tick interval in milliseconds */
 static int TICK_MS_START = 400;
 /** @brief Minimum game tick interval in milliseconds */
@@ -559,7 +218,7 @@ static int TICK_MS_MIN   = 80;
 /** @brief Speed acceleration per level (ms reduction) */
 int SPEED_ACCELERATION = 50;
 /** @brief Aspect ratio correction factor for LED screen distortion */
-static float ASPECT_CORRECTION_FACTOR = 0.75f;
+float ASPECT_CORRECTION_FACTOR = 0.75f;
 /** @brief Lines required to advance to next level */
 static int LEVEL_STEP    = 10;
 
@@ -1126,8 +785,7 @@ static void applyThemePieceColors(){
  * @param g Game board grid (modified in place)
  * @return Number of lines cleared
  */
-/* moved into GameBoard::clearLines */
-void newActive(Active& a, int idx){ a.idx=idx; a.rot=0; a.x=COLS/2; a.y=0; }
+/* moved to include/app/GameHelpers.hpp and src/app/GameHelpers.cpp */
 // rotateWithKicks is declared in include/game/Mechanics.hpp
 
 // ===========================
@@ -3452,30 +3110,7 @@ static void initializeRandomizer(GameState& state) {
     state.getCombo().reset();  // Reset combo no início
 }
 
-// Bridge layout calculation (replicates the original calculate with current globals)
-void db_layoutCalculate(LayoutCache& layout) {
-    SDL_DisplayMode dmNow; SDL_GetCurrentDisplayMode(0, &dmNow);
-    layout.SWr = dmNow.w; layout.SHr = dmNow.h;
-    if (layout.SWr * 9 >= layout.SHr * 16) {
-        layout.CH = layout.SHr; layout.CW = (layout.CH * 16) / 9; layout.CX = (layout.SWr - layout.CW) / 2; layout.CY = 0;
-        } else { 
-        layout.CW = layout.SWr; layout.CH = (layout.CW * 9) / 16; layout.CX = 0; layout.CY = (layout.SHr - layout.CH) / 2;
-    }
-    layout.scale = HUD_FIXED_SCALE;
-    layout.GAP1 = BORDER + GAP1_SCALE * layout.scale;
-    layout.GAP2 = BORDER + GAP2_SCALE * layout.scale;
-    layout.bannerW = 8 * layout.scale + 24;
-    layout.panelTarget = (int)(layout.CW * 0.28);
-    layout.usableLeftW = layout.CW - (BORDER + layout.bannerW + layout.GAP1) - layout.panelTarget - layout.GAP2;
-    int cellW = layout.usableLeftW / COLS;
-    int cellH = (layout.CH - 2 * BORDER) / ROWS;
-        cellH = (int)(cellH * ASPECT_CORRECTION_FACTOR);
-    layout.cellBoard = std::min(std::max(8, cellW), cellH);
-    layout.GW = layout.cellBoard * COLS; layout.GH = layout.cellBoard * ROWS;
-    layout.BX = layout.CX + BORDER; layout.BY = layout.CY + (layout.CH - layout.GH) / 2; layout.BW = layout.bannerW; layout.BH = layout.GH;
-    layout.GX = layout.BX + layout.BW + layout.GAP1; layout.GY = layout.BY;
-    layout.panelX = layout.GX + layout.GW + layout.GAP2; layout.panelW = layout.CX + layout.CW - layout.panelX - BORDER; layout.panelY = layout.BY; layout.panelH = layout.GH;
-}
+// moved to src/render/LayoutHelpers.cpp
 
 // Função comum para eliminar duplicação
 // DEPRECATED: Use GameState::updatePiece() instead
@@ -3976,7 +3611,9 @@ int main(int, char**) {
     SDL_Renderer* ren = nullptr;
 
     // Inicialização completa usando GameInitializer
-    printf("🚀 Testing Complete GameInitializer...\n");
+    printf("🚀 DropBlocks v%s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
+    printf("   Features: %s\n\n", DROPBLOCKS_FEATURES);
+    printf("🔧 Testing Complete GameInitializer...\n");
     if (!initializer.initializeComplete(audio, inputManager, configManager, state, win, ren)) {
         printf("❌ GameInitializer complete test failed!\n");
         return 1;

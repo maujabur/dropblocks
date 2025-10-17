@@ -1,4 +1,5 @@
 #include "app/GameState.hpp"
+#include "app/GameHelpers.hpp"
 #include "audio/AudioSystem.hpp"
 #include "ThemeManager.hpp"
 #include "pieces/PieceManager.hpp"
@@ -13,7 +14,6 @@
 #include <ctime>
 
 extern std::vector<Piece> PIECES;
-extern void newActive(Active& a, int idx);
 
 // DependencyContainer forward (defined in dropblocks.cpp)
 class DependencyContainer;
