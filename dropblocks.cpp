@@ -38,6 +38,7 @@
 #include "render/Primitives.hpp"
 #include "render/Layers.hpp"
 #include "ConfigManager.hpp"
+#include "config/ConfigProcessors.hpp"
 #include "input/IInputManager.hpp"
 #include "DebugLogger.hpp"
 #include "input/InputHandler.hpp"
@@ -81,9 +82,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "6.22"
-#define DROPBLOCKS_BUILD_INFO "Phase 13: Joystick system modular"
-#define DROPBLOCKS_FEATURES "JoystickSystem extracted (~420 lines); complete input module separation"
+#define DROPBLOCKS_VERSION "6.24"
+#define DROPBLOCKS_BUILD_INFO "Phase 14: Config processors modular"
+#define DROPBLOCKS_FEATURES "ConfigProcessors module extracted (~200 lines); config parsing centralized"
 
 // ===========================
 //   FORWARD DECLARATIONS
@@ -159,8 +160,7 @@ float ASPECT_CORRECTION_FACTOR = 0.75f;
 /** @brief Lines required to advance to next level */
 static int LEVEL_STEP    = 10;
 
-// Forward declaration
-static bool parseHexColor(const std::string& s, Uint8& r, Uint8& g, Uint8& b);
+// Forward declarations moved to include/config/ConfigProcessors.hpp
 
 
 // Global manager instances (temporary during migration)
@@ -172,7 +172,7 @@ class PieceManager;
 
 // Forward declarations for functions that use pieceManager
 // moved to PieceManager: bool pm_loadPiecesFromStream(std::istream& in)
-static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick);
+// processJoystickConfigs moved to include/config/ConfigProcessors.hpp
 
 // Temporary global variables eliminated - now using PieceManager private fields
 
@@ -183,112 +183,7 @@ std::vector<Piece> PIECES;
 //   UTILS: STR / CORES / PARSING
 // ===========================
 
-/**
- * @brief Trim whitespace from string
- * 
- * Removes leading and trailing whitespace characters from a string.
- * 
- * @param s Reference to string to trim (modified in place)
- */
-static void trim(std::string& s){
-    size_t a=s.find_first_not_of(" \t\r\n");
-    size_t b=s.find_last_not_of(" \t\r\n");
-    if(a==std::string::npos){ s.clear(); return; }
-    s=s.substr(a,b-a+1);
-}
-/**
- * @brief Parse hexadecimal color string
- * 
- * Parses a hexadecimal color string in format #RRGGBB or RRGGBB
- * and extracts the RGB components.
- * 
- * @param s Input color string (e.g., "#FF0000" or "FF0000")
- * @param r Reference to store red component (0-255)
- * @param g Reference to store green component (0-255)
- * @param b Reference to store blue component (0-255)
- * @return true if parsing successful, false otherwise
- */
-static bool parseHexColor(const std::string& s, Uint8& r, Uint8& g, Uint8& b){
-    // Aceita tanto #RRGGBB quanto RRGGBB
-    std::string color = s;
-    if (color.size() == 6 && color[0] != '#') {
-        // Adiciona # se não tiver
-        color = "#" + color;
-    }
-    if (color.size()!=7 || color[0]!='#') return false;
-    auto cv=[&](char c)->int{
-        if(c>='0'&&c<='9') return c-'0';
-        c=(char)std::toupper((unsigned char)c);
-        if(c>='A'&&c<='F') return 10+(c-'A');
-        return -1;
-    };
-    auto hx=[&](char a,char b){int A=cv(a),B=cv(b); return (A<0||B<0)?-1:(A*16+B);};
-    int R=hx(color[1],color[2]), G=hx(color[3],color[4]), B=hx(color[5],color[6]);
-    if(R<0||G<0||B<0) return false; r=(Uint8)R; g=(Uint8)G; b=(Uint8)B; return true;
-}
-static bool parseInt(const std::string& s, int& out){
-    char* e=nullptr; long v=strtol(s.c_str(), &e, 10);
-    if(e==s.c_str()||*e!='\0') return false; out=(int)v; return true;
-}
-static bool parseCoordList(const std::string& val, std::vector<std::pair<int,int>>& out){
-    out.clear();
-    
-    // Parse coordinates like "(0,0);(1,0);(0,1);(1,1)"
-    size_t pos = 0;
-    while(pos < val.size()){
-        // Skip whitespace
-        while(pos < val.size() && (val[pos] == ' ' || val[pos] == '\t')) pos++;
-        if(pos >= val.size()) break;
-        
-        // Look for opening parenthesis
-        if(val[pos] != '('){
-            pos++;
-            continue;
-        }
-        pos++; // skip '('
-        
-        // Parse x coordinate
-        int x = 0, y = 0;
-        int sign = 1;
-        if(pos < val.size() && val[pos] == '-'){ sign = -1; pos++; }
-        else if(pos < val.size() && val[pos] == '+'){ sign = 1; pos++; }
-        
-        while(pos < val.size() && std::isdigit(val[pos])){
-            x = x * 10 + (val[pos] - '0');
-            pos++;
-        }
-        x *= sign;
-        
-        // Skip comma
-        if(pos < val.size() && val[pos] == ',') pos++;
-        
-        // Parse y coordinate
-        sign = 1;
-        if(pos < val.size() && val[pos] == '-'){ sign = -1; pos++; }
-        else if(pos < val.size() && val[pos] == '+'){ sign = 1; pos++; }
-        
-        while(pos < val.size() && std::isdigit(val[pos])){
-            y = y * 10 + (val[pos] - '0');
-            pos++;
-        }
-        y *= sign;
-        
-        // Skip closing parenthesis
-        if(pos < val.size() && val[pos] == ')') pos++;
-        
-        // Add coordinate
-        out.push_back({x, y});
-        
-        // Skip semicolon
-        if(pos < val.size() && val[pos] == ';') pos++;
-    }
-    
-    return !out.empty();
-}
-static bool parseKicks(const std::string& v, std::vector<std::pair<int,int>>& out){ return parseCoordList(v,out); }
-static void rotate90(std::vector<std::pair<int,int>>& pts){
-    for(auto& p:pts){ int x=p.first,y=p.second; p.first=-y; p.second=x; }
-}
+// trim(), parseHexColor(), and parsing helpers moved to src/config/ConfigProcessors.cpp
 
 // ===========================
 //   CONFIGURAÇÃO E CARREGAMENTO
@@ -346,7 +241,7 @@ static bool processThemeColors(const std::string& key, const std::string& val, i
     auto setrgb = [&](const char* K, Uint8& R, Uint8& G, Uint8& B) {
         if (key == K) { 
             Uint8 r, g, b; 
-            if (parseHexColor(val, r, g, b)) { 
+            if (ConfigProcessors::parseHexColor(val, r, g, b)) { 
                 R = r; G = g; B = b; 
                 return true; 
             } 
@@ -426,7 +321,7 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
     // Grid colors RGB
     if (key == "NEXT_GRID_DARK_COLOR") {
         Uint8 r, g, b;
-        if (parseHexColor(val, r, g, b)) {
+        if (ConfigProcessors::parseHexColor(val, r, g, b)) {
             themeManager.getTheme().next_grid_dark_r = r; themeManager.getTheme().next_grid_dark_g = g; themeManager.getTheme().next_grid_dark_b = b;
             themeManager.getTheme().next_grid_use_rgb = true;
             processedLines++;
@@ -435,7 +330,7 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
     }
     if (key == "NEXT_GRID_LIGHT_COLOR") {
         Uint8 r, g, b;
-        if (parseHexColor(val, r, g, b)) {
+        if (ConfigProcessors::parseHexColor(val, r, g, b)) {
             themeManager.getTheme().next_grid_light_r = r; themeManager.getTheme().next_grid_light_g = g; themeManager.getTheme().next_grid_light_b = b;
             themeManager.getTheme().next_grid_use_rgb = true;
             processedLines++;
@@ -454,7 +349,7 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
         }
         
         Uint8 r, g, b;
-        if (parseHexColor(val, r, g, b)) {
+        if (ConfigProcessors::parseHexColor(val, r, g, b)) {
             if (pieceIndex >= (int)themeManager.getTheme().piece_colors.size()) {
                 themeManager.getTheme().piece_colors.resize(pieceIndex + 1, {200, 200, 200});
             }
@@ -467,7 +362,7 @@ static bool processSpecialConfigs(const std::string& key, const std::string& val
     return false;
 }
 
-static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickSystem& joystick) {
+static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickSystem& joystick, PieceManager& pieceManager) {
     
     std::string line;
     int lineNum = 0;
@@ -478,8 +373,8 @@ static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickS
         lineNum++;
         
         // Parse da linha (remove comentários)
-        line = parseConfigLine(line);
-        trim(line);
+        line = ConfigProcessors::parseConfigLine(line);
+        ConfigProcessors::trim(line);
         
         if (line.empty()) {
             skippedLines++;
@@ -494,8 +389,8 @@ static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickS
         
         std::string key = line.substr(0, eq);
         std::string val = line.substr(eq + 1);
-        trim(key);
-        trim(val);
+        ConfigProcessors::trim(key);
+        ConfigProcessors::trim(val);
         
         if (key.empty()) {
             skippedLines++;
@@ -505,23 +400,23 @@ static void loadConfigFromStream(std::istream& in, AudioSystem& audio, JoystickS
         std::string KEY = key;
         for (char& c : KEY) c = (char)std::toupper((unsigned char)c);
 
-        // Processar usando funções especializadas
-        if (processBasicConfigs(KEY, val, processedLines)) continue;
-        if (processThemeColors(KEY, val, processedLines)) continue;
-        if (processAudioConfigs(KEY, val, processedLines, audio)) continue;
-        if (processJoystickConfigs(KEY, val, processedLines, joystick)) continue;
-        if (processSpecialConfigs(KEY, val, processedLines)) continue;
+        // Processar usando funções especializadas do módulo ConfigProcessors
+        if (ConfigProcessors::processBasicConfigs(KEY, val, processedLines)) continue;
+        if (ConfigProcessors::processThemeColors(KEY, val, processedLines, themeManager)) continue;
+        if (ConfigProcessors::processAudioConfigs(KEY, val, processedLines, audio)) continue;
+        if (ConfigProcessors::processJoystickConfigs(KEY, val, processedLines, joystick, pieceManager)) continue;
+        if (ConfigProcessors::processSpecialConfigs(KEY, val, processedLines, themeManager)) continue;
         
         // Linha não reconhecida
         skippedLines++;
     }
     
 }
-static bool loadConfigPath(const std::string& p, AudioSystem& audio, JoystickSystem& joystick){
+static bool loadConfigPath(const std::string& p, AudioSystem& audio, JoystickSystem& joystick, PieceManager& pieceManager){
     
     std::ifstream f(p.c_str()); 
     if(f.good()){ 
-        loadConfigFromStream(f, audio, joystick);
+        loadConfigFromStream(f, audio, joystick, pieceManager);
         return true; 
     } 
     return false;
@@ -537,30 +432,30 @@ static bool loadConfigPath(const std::string& p, AudioSystem& audio, JoystickSys
  * 
  * @param audio Audio system reference for audio configuration
  */
-static void loadConfigFile(AudioSystem& audio, JoystickSystem& joystick){
+static void loadConfigFile(AudioSystem& audio, JoystickSystem& joystick, PieceManager& pieceManager){
     
     if(const char* env = std::getenv("DROPBLOCKS_CFG")){ 
-        if(loadConfigPath(env, audio, joystick)) { 
+        if(loadConfigPath(env, audio, joystick, pieceManager)) { 
             DebugLogger::info("Config carregado de: " + std::string(env)); 
             return; 
         } 
     }
-    if(loadConfigPath("default.cfg", audio, joystick)) { 
+    if(loadConfigPath("default.cfg", audio, joystick, pieceManager)) { 
         DebugLogger::info("Config carregado de: default.cfg"); 
         return; 
     }
-    if(loadConfigPath("dropblocks.cfg", audio, joystick)) { 
+    if(loadConfigPath("dropblocks.cfg", audio, joystick, pieceManager)) { 
         DebugLogger::info("Config carregado de: dropblocks.cfg"); 
         return; 
     } // fallback para compatibilidade
     if(const char* home = std::getenv("HOME")){
         std::string p = std::string(home) + "/.config/default.cfg";
-        if(loadConfigPath(p, audio, joystick)) { 
+        if(loadConfigPath(p, audio, joystick, pieceManager)) { 
             DebugLogger::info("Config carregado de: " + p); 
             return; 
         }
         std::string p2 = std::string(home) + "/.config/dropblocks.cfg";
-        if(loadConfigPath(p2, audio, joystick)) { 
+        if(loadConfigPath(p2, audio, joystick, pieceManager)) { 
             DebugLogger::info("Config carregado de: " + p2); 
             return; 
         }
@@ -950,26 +845,8 @@ static void initializeRandomizer(GameState& state) {
 // moved to src/render/LayoutHelpers.cpp
 
 // Função comum para eliminar duplicação
-// DEPRECATED: Use GameState::updatePiece() instead
-static void processPieceFall(GameState& state, AudioSystem& audio) {
-    state.updatePiece();
-}
-
-// DEPRECATED: Use GameState::handleInput() instead
-static void handleInput(GameState& state, AudioSystem& audio, SDL_Renderer* ren, InputManager& inputManager) {
-    state.handleInput(ren);
-}
-
-// DEPRECATED: Use GameBoard::checkTension() instead
-static void checkTensionSound(const GameState& state, AudioSystem& audio) {
-    state.getBoard().checkTension(audio);
-}
-
-// DEPRECATED: Use GameState::update() instead
-static void updateGame(GameState& state, AudioSystem& audio) {
-    // This function is now handled by GameState::update()
-    // Keeping for backward compatibility but functionality moved to GameState
-}
+// DEPRECATED functions removed (processPieceFall, handleInput, checkTensionSound, updateGame)
+// All functionality moved to GameState methods
 
 // Funções especializadas extraídas da main
 static bool initializeSDL() {
