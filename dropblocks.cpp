@@ -47,6 +47,9 @@
 #include "include/audio/AudioSystem.hpp"
 #include "include/pieces/PieceManager.hpp"
 #include "include/render/GameStateBridge.hpp"
+#include "include/game/Mechanics.hpp"
+#include "include/app/GameTypes.hpp"
+#include "include/app/ComboSystem.hpp"
 #include <vector>
 #include <string>
 #include <ctime>
@@ -54,6 +57,10 @@
 #include <functional>
 #include <map>
 #include "include/ConfigTypes.hpp"
+#include "include/util/UiUtil.hpp"
+#include "include/app/GameBoard.hpp"
+#include "include/app/ScoreSystem.hpp"
+#include "include/app/GameState.hpp"
 #include <stdexcept>
 #include <algorithm>
 #include <chrono>
@@ -61,9 +68,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "6.19"
-#define DROPBLOCKS_BUILD_INFO "Phase 10: Visual bridge + input centralization"
-#define DROPBLOCKS_FEATURES "Visual effects via bridge; centralized quit/pause; pieces loader modular"
+#define DROPBLOCKS_VERSION "6.20"
+#define DROPBLOCKS_BUILD_INFO "Phase 11: GameState + core systems modular"
+#define DROPBLOCKS_FEATURES "GameState, GameBoard, ScoreSystem, Mechanics extracted to modules"
 
 // ===========================
 //   FORWARD DECLARATIONS
@@ -540,9 +547,9 @@ static int RAND_BAG_SIZE  = 0;             // 0 => tamanho do set
 // ===========================
 
 /** @brief Number of columns in the game board */
-static const int COLS = 10;
+const int COLS = 10;
 /** @brief Number of rows in the game board */
-static const int ROWS = 20;
+const int ROWS = 20;
 /** @brief Border size around the game board */
 static const int BORDER = 10;
 /** @brief Initial game tick interval in milliseconds */
@@ -550,7 +557,7 @@ static int TICK_MS_START = 400;
 /** @brief Minimum game tick interval in milliseconds */
 static int TICK_MS_MIN   = 80;
 /** @brief Speed acceleration per level (ms reduction) */
-static int SPEED_ACCELERATION = 50;
+int SPEED_ACCELERATION = 50;
 /** @brief Aspect ratio correction factor for LED screen distortion */
 static float ASPECT_CORRECTION_FACTOR = 0.75f;
 /** @brief Lines required to advance to next level */
@@ -561,7 +568,7 @@ static int LEVEL_STEP    = 10;
  * 
  * Represents a single cell on the game board with color and occupancy information.
  */
-struct Cell { Uint8 r,g,b; bool occ=false; };
+// moved to include/app/GameTypes.hpp
 
 /**
  * @brief Tetris piece structure
@@ -587,7 +594,7 @@ static bool parseHexColor(const std::string& s, Uint8& r, Uint8& g, Uint8& b);
 // ThemeManager class moved to include/ThemeManager.hpp
 
 // Global manager instances (temporary during migration)
-static GameConfig gameConfig;
+GameConfig gameConfig;
 ThemeManager themeManager;
 
 // Forward declarations for classes
@@ -607,7 +614,7 @@ std::vector<Piece> PIECES;
  * 
  * Represents the currently falling piece with its position, rotation, and piece index.
  */
-struct Active { int x=COLS/2, y=0, rot=0, idx=0; };
+// moved to include/app/GameTypes.hpp
 
 // ===========================
 //   UTILS: STR / CORES / PARSING
@@ -1101,17 +1108,7 @@ static void applyThemePieceColors(){
  * @param drot Rotation offset to test
  * @return true if collision detected, false otherwise
  */
-static bool collides(const Active& a, const std::vector<std::vector<Cell>>& g, int dx, int dy, int drot){
-    int R = (a.rot + drot + 4)%4;
-    for (auto [px,py] : PIECES[a.idx].rot[R]) {
-        int x = a.x + dx + px, y = a.y + dy + py;
-        // Allow y < 0 (above visible top) so rotations near spawn/top are possible
-        if (y < 0) continue;
-        if (x<0 || x>=COLS || y>=ROWS) return true;
-        if (g[y][x].occ) return true;
-    }
-    return false;
-}
+/* moved to src/game/Mechanics.cpp */
 /**
  * @brief Lock piece to the board
  * 
@@ -1120,15 +1117,7 @@ static bool collides(const Active& a, const std::vector<std::vector<Cell>>& g, i
  * @param a Active piece to lock
  * @param g Game board grid (modified in place)
  */
-static void lockPiece(const Active& a, std::vector<std::vector<Cell>>& g){
-    auto &pc = PIECES[a.idx];
-    for (auto [px,py] : pc.rot[a.rot]) {
-        int x=a.x+px, y=a.y+py;
-        if (y>=0 && y<ROWS && x>=0 && x<COLS){
-            g[y][x].occ=true; g[y][x].r=pc.r; g[y][x].g=pc.g; g[y][x].b=pc.b;
-        }
-    }
-}
+/* moved to src/game/Mechanics.cpp */
 /**
  * @brief Clear completed lines
  * 
@@ -1137,17 +1126,9 @@ static void lockPiece(const Active& a, std::vector<std::vector<Cell>>& g){
  * @param g Game board grid (modified in place)
  * @return Number of lines cleared
  */
-static int clearLines(std::vector<std::vector<Cell>>& g){
-    int cleared=0;
-    for (int y=ROWS-1; y>=0; --y){
-        bool full=true; for (int x=0;x<COLS;x++) if(!g[y][x].occ){ full=false; break; }
-        if (full){ cleared++; for (int yy=y; yy>0; --yy) g[yy]=g[yy-1]; g[0]=std::vector<Cell>(COLS); y++; }
-    }
-    return cleared;
-}
-static void newActive(Active& a, int idx){ a.idx=idx; a.rot=0; a.x=COLS/2; a.y=0; }
-// Declaração forward para rotateWithKicks
-static void rotateWithKicks(Active& act, const std::vector<std::vector<Cell>>& grid, int dir, AudioSystem& audio);
+/* moved into GameBoard::clearLines */
+void newActive(Active& a, int idx){ a.idx=idx; a.rot=0; a.x=COLS/2; a.y=0; }
+// rotateWithKicks is declared in include/game/Mechanics.hpp
 
 // ===========================
 //   FONTE 5x7 PIXEL
@@ -1261,25 +1242,7 @@ void drawRoundedOutline(SDL_Renderer* r, int x, int y, int w, int h, int rad, in
 }
 */
 
-// ===========================
-//   UTILITÁRIOS
-// ===========================
-static std::string fmtScore(int v){
-    std::string s=std::to_string(v),o; int c=0;
-    for(int i=(int)s.size()-1;i>=0;--i){ o.push_back(s[i]); if(++c==3 && i>0){ o.push_back(' '); c=0; } }
-    std::reverse(o.begin(), o.end()); return o;
-}
-static bool saveScreenshot(SDL_Renderer* ren, const char* path) {
-    int w, h; SDL_GetRendererOutputSize(ren, &w, &h);
-    SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, w, h, 24, SDL_PIXELFORMAT_BGR24);
-    if (!surf) return false;
-    if (SDL_RenderReadPixels(ren, nullptr, SDL_PIXELFORMAT_BGR24, surf->pixels, surf->pitch) != 0) {
-        SDL_FreeSurface(surf); return false;
-    }
-    int rc = SDL_SaveBMP(surf, path);
-    SDL_FreeSurface(surf);
-    return (rc == 0);
-}
+// Utilities moved to src/util/UiUtil.cpp
 
 // ===========================
 //   SISTEMA DE ÁUDIO (extraído)
@@ -2196,7 +2159,8 @@ static bool processAudioConfigs(const std::string& key, const std::string& val, 
 
 
 // Implementação da função rotateWithKicks
-static void rotateWithKicks(Active& act, const std::vector<std::vector<Cell>>& grid, int dir, AudioSystem& audio){ // +1 = CW, -1 = CCW
+// moved to src/game/Mechanics.cpp
+/* static void rotateWithKicks(Active& act, const std::vector<std::vector<Cell>>& grid, int dir, AudioSystem& audio){ // +1 = CW, -1 = CCW
     int from = act.rot;
     int to   = (from + dir + 4) % 4;
     auto& p  = PIECES[act.idx];
@@ -2255,35 +2219,13 @@ static void rotateWithKicks(Active& act, const std::vector<std::vector<Cell>>& g
     int sx = (dir>0?1:-1);
     if(!collides(act, grid, sx, 0, dir)) { act.x += sx; act.rot = to; return; }
     if(!collides(act, grid, 0,-1, dir)) { act.y -= 1; act.rot = to; return; }
-}
+} */
 
 // ===========================
 //   FUNÇÕES AUXILIARES DO JOGO
 // ===========================
 
-// Estrutura para sistema de combos
-struct ComboSystem {
-    int combo = 0;
-    Uint32 lastClear = 0;
-    
-    void onLineClear(AudioSystem& audio) {
-        Uint32 now = SDL_GetTicks();
-        if (now - lastClear < 2000) {  // Combo ativo (2 segundos)
-            combo++;
-        } else {
-            combo = 1;
-        }
-        lastClear = now;
-        
-        // Som de combo
-        audio.playComboSound(combo);
-    }
-    
-    void reset() {
-        combo = 0;
-        lastClear = 0;
-    }
-};
+// moved to include/app/ComboSystem.hpp and src/app/ComboSystem.cpp
 
 // ===========================
 //   SISTEMA DE INPUT UNIFICADO
@@ -2756,6 +2698,7 @@ public:
  * 
  * Handles the game grid, piece placement, collision detection, and line clearing
  */
+/* moved to include/app/GameBoard.hpp and src/app/GameBoard.cpp
 class GameBoard {
 private:
     std::vector<std::vector<Cell>> grid_;
@@ -2777,26 +2720,7 @@ public:
     }
     
     // Line clearing
-    int clearLines() {
-        int linesCleared = 0;
-        for (int y = ROWS - 1; y >= 0; y--) {
-            bool fullLine = true;
-            for (int x = 0; x < COLS; x++) {
-                if (!grid_[y][x].occ) {
-                    fullLine = false;
-                    break;
-                }
-            }
-            
-            if (fullLine) {
-                grid_.erase(grid_.begin() + y);
-                grid_.insert(grid_.begin(), std::vector<Cell>(COLS));
-                linesCleared++;
-                y++; // Check the same line again
-            }
-        }
-        return linesCleared;
-    }
+    int clearLines();
     
     // Game over detection
     bool isGameOver(const Active& piece) const {
@@ -2834,12 +2758,14 @@ public:
         audio.playTensionSound(tensionLevel);
     }
 };
+*/
 
 /**
  * @brief Score and level management system
  * 
  * Handles scoring, level progression, and game speed
  */
+/* moved to include/app/ScoreSystem.hpp and src/app/ScoreSystem.cpp
 class ScoreSystem {
 private:
     int score_ = 0;
@@ -2884,6 +2810,7 @@ public:
         tickMs_ = ms;
     }
 };
+*/
 
 /**
  * @brief Piece management and randomization system
@@ -3113,11 +3040,7 @@ static bool processJoystickConfigs(const std::string& key, const std::string& va
     return false;
 }
 
-/**
- * @brief Main game state coordinator
- * 
- * Coordinates all game systems and provides unified interface
- */
+/* moved to include/app/GameState.hpp and src/app/GameState.cpp
 class GameState {
 private:
     GameBoard board_;
@@ -3447,7 +3370,7 @@ public:
         }
     }
 }
-};
+}; */
 
 /**
  * @brief Apply game configuration to GameState
@@ -3792,10 +3715,7 @@ static void initializeRandomizer(GameState& state);
 //   IMPLEMENTAÇÃO DE MÉTODOS DO GAMESTATE
 // ===========================
 
-// Implementação do método render do GameState
-void GameState::render(RenderManager& renderManager, const LayoutCache& layout) {
-    renderManager.render(*this, layout);
-}
+// moved to src/app/GameState.cpp
 
 // ===========================
 //   FUNÇÕES DE RENDERIZAÇÃO (LEGADO - MANTIDAS PARA COMPATIBILIDADE)
