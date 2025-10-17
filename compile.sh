@@ -18,10 +18,19 @@ if [ ! -f "dropblocks.cpp" ]; then
     exit 1
 fi
 
-echo "🔧 Compilando dropblocks.cpp..."
+echo "🔧 Preparando fontes..."
 
-# Compilar o projeto
-g++ dropblocks.cpp -o dropblocks.exe $(sdl2-config --cflags --libs) -O2 -std=c++17
+# Coletar fontes
+SRC_LIST="dropblocks.cpp"
+if [ -d src ]; then
+  SRC_FROM_SRC=$(find src -type f -name '*.cpp' 2>/dev/null | tr '\n' ' ')
+  if [ -n "$SRC_FROM_SRC" ]; then
+    SRC_LIST="$SRC_LIST $SRC_FROM_SRC"
+  fi
+fi
+
+echo "🔧 Compilando: $SRC_LIST"
+g++ -Iinclude $SRC_LIST -o dropblocks.exe $(sdl2-config --cflags --libs) -O2 -std=c++17
 
 # Verificar se a compilação foi bem-sucedida
 if [ $? -eq 0 ]; then
