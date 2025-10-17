@@ -1,58 +1,23 @@
 /**
- * @file dropblocks.cpp
- * @brief DropBlocks - SDL2 single-file falling blocks game (not Tetris®)
- * @author DropBlocks Team
- * @version 1.0
- * @date 2025
- * 
- * A modern, customizable falling blocks game inspired by Tetris®.
- * Features advanced visual effects, customizable themes, and multiple piece sets.
- * 
- * @section controls Controls
- * 
- * KEYBOARD:
- * - ← → : Move piece left/right
- * - ↓ : Soft drop
- * - Z/↑ : Rotate counter-clockwise
- * - X : Rotate clockwise
- * - SPACE : Hard drop
- * - P : Pause
- * - ENTER : Restart (after Game Over)
- * - ESC : Quit
- * - F12 : Screenshot
- * 
- * JOYSTICK/CONTROLLER:
- * - D-pad Left/Right : Move piece left/right
- * - D-pad Down : Soft drop
- * - D-pad Up : Rotate (CCW/CW)
- * - A/X Button : Rotate counter-clockwise
- * - B/Circle Button : Rotate clockwise
- * - X/Square Button : Soft drop
- * - Y/Triangle Button : Hard drop
- * - Start Button : Restart (after Game Over)
- * - Back/Select Button : Pause
- * - Analog sticks : Movement and rotation with deadzone
- * - Guide/PS Button : Disabled in kiosk mode
- * 
- * @section build Build
- * g++ dropblocks.cpp -o dropblocks `sdl2-config --cflags --libs` -O2
- * 
- * @section dependencies Dependencies
- * - SDL2 (graphics and audio)
- * - C++17 compatible compiler
+ * DropBlocks (SDL2)
+ * - Modular architecture: Config, Theme, Audio, Pieces, Render layers, App loop
+ * - Visual effects via bridge (no global externs)
+ * - Centralized input (quit/pause/restart) via InputManager
+ * - Guideline-like rotations (SRS) with fallback pieces
+ *
+ * Controls
+ * - Keyboard: Arrow keys, Z/X/Up, Space, P, Enter, ESC, F12
+ * - Joystick: D-pad, A/B/X/Y, Start/Back, analog (deadzone)
+ *
+ * Build (example)
+ * - g++ dropblocks.cpp -o dropblocks `sdl2-config --cflags --libs` -O2
  */
 
-// TODO: add a configurable countdown timer for use in expositions
-// TODO: check hard drop moving pieces to the right
-// TODO: add piece statistics
-// TODO: make regions configurable by position and size
-// TODO: enhance resolution ans screen ratio system
-// TODO: score acoma de 1.000 aparece com um espaço em branco no milhar, tirar o ponto
-// TODO: remove  grayscale fallback
-// TODO: check if joystick and keyboard call the same methods
-// TODO: check if joystick and keyboard work together
-// TODO: compilar estaticamente com sucesso para executar no windows, verificar dlls necessarias
-// TODO: compilar com sucesso no raspberry pi
+// TODO: countdown timer (exhibitions)
+// TODO: region layout configurability (position/size)
+// TODO: resolution/screen ratio tuning
+// TODO: thousand separator formatting
+// TODO: grayscale fallback removal
 
 
 
@@ -801,21 +766,12 @@ static bool processBasicConfigs(const std::string& key, const std::string& val, 
         return false; 
     };
 
-    if (setb("ENABLE_BANNER_SWEEP", ENABLE_BANNER_SWEEP)) { processedLines++; return true; }
-    if (setb("ENABLE_GLOBAL_SWEEP", ENABLE_GLOBAL_SWEEP)) { processedLines++; return true; }
+    // Visual effect keys now handled via ConfigManager VisualConfig -> applyConfigToTheme/db_getVisualEffects
+    // Layout shortcuts kept for backward compatibility
     if (seti("ROUNDED_PANELS", ROUNDED_PANELS)) { processedLines++; return true; }
     if (seti("HUD_FIXED_SCALE", HUD_FIXED_SCALE)) { processedLines++; return true; }
     if (seti("GAP1_SCALE", GAP1_SCALE)) { processedLines++; return true; }
     if (seti("GAP2_SCALE", GAP2_SCALE)) { processedLines++; return true; }
-    if (seti("SWEEP_BAND_H_S", SWEEP_BAND_H_S)) { processedLines++; return true; }
-    if (seti("SWEEP_ALPHA_MAX", SWEEP_ALPHA_MAX)) { processedLines++; return true; }
-    if (seti("SWEEP_G_BAND_H_PX", SWEEP_G_BAND_H_PX)) { processedLines++; return true; }
-    if (seti("SWEEP_G_ALPHA_MAX", SWEEP_G_ALPHA_MAX)) { processedLines++; return true; }
-    if (seti("SCANLINE_ALPHA", SCANLINE_ALPHA)) { processedLines++; return true; }
-    if (setf("SWEEP_SPEED_PXPS", SWEEP_SPEED_PXPS)) { processedLines++; return true; }
-    if (setf("SWEEP_SOFTNESS", SWEEP_SOFTNESS)) { processedLines++; return true; }
-    if (setf("SWEEP_G_SPEED_PXPS", SWEEP_G_SPEED_PXPS)) { processedLines++; return true; }
-    if (setf("SWEEP_G_SOFTNESS", SWEEP_G_SOFTNESS)) { processedLines++; return true; }
     
     return false;
 }
