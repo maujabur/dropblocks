@@ -1272,7 +1272,7 @@ static void rotateWithKicks(Active& act, const std::vector<std::vector<Cell>>& g
 // ===========================
 //   FONTE 5x7 PIXEL
 // ===========================
-/* moved to src/render/Primitives.cpp
+// moved to src/render/Primitives.cpp
 static bool glyph(char c, int x, int y){
     auto at=[&](const char* rows[7]){ return rows[y][x]=='#'; };
     static const char* NUM[10][7] = {
@@ -1379,7 +1379,7 @@ void drawRoundedOutline(SDL_Renderer* r, int x, int y, int w, int h, int rad, in
         drawRoundedFilled(r, x+i, y+i, w-2*i, h-2*i, std::max(0,rad-i), R,G,B,A);
     }
 }
-*/
+// end primitives moved
 
 // ===========================
 //   UTILITÁRIOS
@@ -1410,7 +1410,7 @@ static bool saveScreenshot(SDL_Renderer* ren, const char* path) {
  * 
  * Handles SDL audio device initialization, cleanup, and basic sound generation
  */
-/* moved to src/audio/AudioSystem.cpp
+// moved to src/audio/AudioSystem.cpp
 class AudioDevice {
 private:
     SDL_AudioDeviceID device_ = 0;
@@ -1685,14 +1685,14 @@ public:
     bool enableComboSounds = true;
     bool enableLevelUpSounds = true;
 };
-*/
+// end audio moved
 
 // ===========================
 //   IMPLEMENTAÇÕES DO SISTEMA DE CONFIGURAÇÃO
 // ===========================
 
 // Implementação do VisualConfigParser
-/* moved to src/ConfigManager.cpp
+// moved to src/ConfigManager.cpp
 bool VisualConfigParser::parseBool(const std::string& value) const {
     std::string v = value;
     for (char& c : v) c = (char)std::tolower((unsigned char)c);
@@ -2132,7 +2132,7 @@ bool ConfigManager::validate() const {
            inputParser.validate() && piecesParser.validate() && 
            gameParser.validate();
 }
-*/
+// end config moved
 
 // ===========================
 //   FUNÇÕES DE APLICAÇÃO DE CONFIGURAÇÃO
