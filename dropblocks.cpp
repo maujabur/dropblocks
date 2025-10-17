@@ -13,13 +13,16 @@
  * - g++ dropblocks.cpp -o dropblocks `sdl2-config --cflags --libs` -O2
  */
 
-// TODO: countdown timer (exhibitions)
-// TODO: region layout configurability (position/size)
-// TODO: resolution/screen ratio tuning
-// TODO: thousand separator formatting
-// TODO: grayscale fallback removal
-
-
+// TODO: Add a configurable countdown timer for exhibitions
+// TODO: Make regions configurable by position and size
+// TODO: Refine resolution handling and screen ratio support
+// TODO: Improve thousand-separator formatting in scores
+// TODO: Remove grayscale fallback paths
+// TODO: Ensure joystick and keyboard invoke the same input methods
+// TODO: Verify joystick and keyboard can be used together seamlessly
+// TODO: Produce a statically-linked Windows build; verify required DLLs
+// TODO: Produce a successful Raspberry Pi build
+// TODO: Add HUD region showing dropped piece counts by type
 
 #include <SDL2/SDL.h>
 #include "include/render/RenderLayer.hpp"
