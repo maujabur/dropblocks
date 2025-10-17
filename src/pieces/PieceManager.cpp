@@ -4,6 +4,9 @@
 #include <SDL2/SDL.h>
 #include <algorithm>
 #include <ctime>
+#include <string>
+#include <istream>
+#include <cctype>
 
 // External data owned by main app
 extern std::vector<Piece> PIECES;
@@ -72,6 +75,132 @@ bool PieceManager::loadPiecesFile() {
         if (db_loadPiecesPath(p)) return true;
     }
     return false;
+}
+
+// ---------- Internal parsing helpers (migrated from dropblocks.cpp) ----------
+static bool pm_parseHexColor(const std::string& s, Uint8& r, Uint8& g, Uint8& b){
+    std::string color = s;
+    if (color.size() == 6 && color[0] != '#') color = "#" + color;
+    if (color.size()!=7 || color[0]!='#') return false;
+    auto cv=[&](char c)->int{ if(c>='0'&&c<='9') return c-'0'; c=(char)std::toupper((unsigned char)c); if(c>='A'&&c<='F') return 10+(c-'A'); return -1; };
+    auto hx=[&](char a,char b){int A=cv(a),B=cv(b); return (A<0||B<0)?-1:(A*16+B);} ;
+    int R=hx(color[1],color[2]), G=hx(color[3],color[4]), B=hx(color[5],color[6]);
+    if(R<0||G<0||B<0) return false; r=(Uint8)R; g=(Uint8)G; b=(Uint8)B; return true;
+}
+
+static bool pm_parseInt(const std::string& s, int& out){
+    char* e=nullptr; long v=strtol(s.c_str(), &e, 10);
+    if(e==s.c_str()||*e!='\0') return false; out=(int)v; return true;
+}
+
+static bool pm_parseCoordList(const std::string& val, std::vector<std::pair<int,int>>& out){
+    out.clear(); size_t pos = 0;
+    while(pos < val.size()){
+        while(pos < val.size() && (val[pos] == ' ' || val[pos] == '\t')) pos++;
+        if(pos >= val.size()) break; if(val[pos] != '('){ pos++; continue; } pos++;
+        int x = 0, y = 0, sign = 1; if(pos < val.size() && val[pos] == '-') { sign=-1; pos++; } else if(pos<val.size() && val[pos]=='+'){ pos++; }
+        while(pos < val.size() && std::isdigit((unsigned char)val[pos])){ x = x*10 + (val[pos]-'0'); pos++; }
+        x *= sign; if(pos < val.size() && val[pos] == ',') pos++;
+        sign = 1; if(pos < val.size() && val[pos] == '-') { sign=-1; pos++; } else if(pos<val.size() && val[pos]=='+'){ pos++; }
+        while(pos < val.size() && std::isdigit((unsigned char)val[pos])){ y = y*10 + (val[pos]-'0'); pos++; }
+        y *= sign; if(pos < val.size() && val[pos] == ')') pos++;
+        out.push_back({x, y}); if(pos < val.size() && val[pos] == ';') pos++;
+    }
+    return !out.empty();
+}
+
+static bool pm_parseKicks(const std::string& v, std::vector<std::pair<int,int>>& out){ return pm_parseCoordList(v,out); }
+static void pm_rotate90(std::vector<std::pair<int,int>>& pts){ for(auto& p:pts){ int x=p.first,y=p.second; p.first=-y; p.second=x; } }
+
+static std::string pm_parsePiecesLine(const std::string& line) {
+    size_t semi = line.find(';'); size_t cut = std::string::npos;
+    if (semi != std::string::npos) {
+        if (semi == 0 || (semi > 0 && line[semi-1] == ' ')) { cut = semi; }
+        else {
+            size_t eq_probe = line.find('='); if (eq_probe != std::string::npos && semi > eq_probe) {
+                size_t paren_after_semi = line.find('(', semi);
+                if (paren_after_semi == std::string::npos) { cut = semi; }
+            }
+        }
+    }
+    if (cut != std::string::npos) { std::string result = line; result.resize(cut); return result; }
+    return line;
+}
+
+static void pm_buildPieceRotations(Piece& piece, const std::vector<std::pair<int,int>>& base,
+                                   const std::vector<std::pair<int,int>>& rot0,
+                                   const std::vector<std::pair<int,int>>& rot1,
+                                   const std::vector<std::pair<int,int>>& rot2,
+                                   const std::vector<std::pair<int,int>>& rot3,
+                                   bool rotExplicit) {
+    piece.rot.clear();
+    if (rotExplicit) {
+        if (!rot0.empty()) {
+            piece.rot.push_back(rot0);
+            piece.rot.push_back(rot1.empty() ? rot0 : rot1);
+            piece.rot.push_back(rot2.empty() ? rot0 : rot2);
+            piece.rot.push_back(rot3.empty() ? (rot1.empty() ? rot0 : rot1) : rot3);
+        }
+    } else {
+        if (!base.empty()) {
+            std::vector<std::pair<int,int>> r0 = base, r1 = base, r2 = base, r3 = base;
+            pm_rotate90(r1); r2 = r1; pm_rotate90(r2); r3 = r2; pm_rotate90(r3);
+            piece.rot.push_back(r0); piece.rot.push_back(r1); piece.rot.push_back(r2); piece.rot.push_back(r3);
+        }
+    }
+}
+
+static bool pm_processPieceProperty(Piece& cur, const std::string& key, const std::string& val,
+                                    std::vector<std::pair<int,int>>& base,
+                                    std::vector<std::pair<int,int>>& rot0,
+                                    std::vector<std::pair<int,int>>& rot1,
+                                    std::vector<std::pair<int,int>>& rot2,
+                                    std::vector<std::pair<int,int>>& rot3,
+                                    bool& rotExplicit) {
+    if (key == "COLOR") { Uint8 r, g, b; if (pm_parseHexColor(val, r, g, b)) { cur.r=r; cur.g=g; cur.b=b; } return true; }
+    if (key == "ROTATIONS") { std::string vv = val; for (char& c : vv) c = (char)std::tolower((unsigned char)c); rotExplicit = (vv == "explicit"); return true; }
+    if (key == "BASE") { pm_parseCoordList(val, base); return true; }
+    if (key == "ROT0") { if (val.rfind("sameas:", 0) == 0) { /* keep rot0 */ } else pm_parseCoordList(val, rot0); rotExplicit = true; return true; }
+    if (key == "ROT1") { if (val.rfind("sameas:", 0) == 0) { rot1 = rot0; } else pm_parseCoordList(val, rot1); rotExplicit = true; return true; }
+    if (key == "ROT2") { if (val.rfind("sameas:", 0) == 0) { rot2 = rot0; } else pm_parseCoordList(val, rot2); rotExplicit = true; return true; }
+    if (key == "ROT3") { if (val.rfind("sameas:", 0) == 0) { rot3 = rot1.empty() ? rot0 : rot1; } else pm_parseCoordList(val, rot3); rotExplicit = true; return true; }
+    if (key == "KICKS.CW") { pm_parseKicks(val, cur.kicksCW); cur.hasKicks = true; return true; }
+    if (key == "KICKS.CCW") { pm_parseKicks(val, cur.kicksCCW); cur.hasKicks = true; return true; }
+    auto setKPT = [&](int dirIdx, int fromState, const std::string& v) {
+        std::vector<std::pair<int,int>> tmp; if (pm_parseCoordList(v, tmp)) { cur.kicksPerTrans[dirIdx][fromState] = tmp; cur.hasPerTransKicks = true; return true; } return false; };
+    if (key.rfind("KICKS.CW.", 0) == 0) { std::string t = key.substr(10); if (t=="0TO1") { setKPT(0,0,val); return true; } if (t=="1TO2") { setKPT(0,1,val); return true; } if (t=="2TO3") { setKPT(0,2,val); return true; } if (t=="3TO0") { setKPT(0,3,val); return true; } }
+    if (key.rfind("KICKS.CCW.", 0) == 0) { std::string t = key.substr(11); if (t=="0TO3") { setKPT(1,0,val); return true; } if (t=="3TO2") { setKPT(1,3,val); return true; } if (t=="2TO1") { setKPT(1,2,val); return true; } if (t=="1TO0") { setKPT(1,1,val); return true; } }
+    return false;
+}
+
+bool pm_loadPiecesFromStream(std::istream& in) {
+    PIECES.clear(); g_randomizerType = (RandType)0; g_randBagSize = 0;
+    std::string line, section; Piece cur; bool inPiece = false; bool rotExplicit = false;
+    std::vector<std::pair<int,int>> rot0, rot1, rot2, rot3, base;
+    auto flushPiece = [&]() {
+        if (!inPiece) return; pm_buildPieceRotations(cur, base, rot0, rot1, rot2, rot3, rotExplicit);
+        if (!cur.rot.empty()) { PIECES.push_back(cur); }
+        cur = Piece{}; rotExplicit = false; rot0.clear(); rot1.clear(); rot2.clear(); rot3.clear(); base.clear(); inPiece = false; };
+    while (std::getline(in, line)) {
+        line = pm_parsePiecesLine(line); auto trim = [&](std::string& s){ size_t a=s.find_first_not_of(" \t\r\n"); size_t b=s.find_last_not_of(" \t\r\n"); if (a==std::string::npos) { s.clear(); return; } s=s.substr(a,b-a+1); };
+        trim(line); if (line.empty()) continue;
+        if (line.front() == '[' && line.back() == ']') {
+            std::string sec = line.substr(1, line.size() - 2); std::string SEC = sec; for (char& c : SEC) c = (char)std::toupper((unsigned char)c);
+            if (SEC.rfind("PIECE.", 0) == 0) { flushPiece(); inPiece = true; cur = Piece{}; rotExplicit = false; rot0.clear(); rot1.clear(); rot2.clear(); rot3.clear(); base.clear(); cur.name = sec.substr(6); }
+            else { flushPiece(); inPiece = false; section = SEC; }
+            continue;
+        }
+        size_t eq = line.find('='); if (eq == std::string::npos) continue;
+        std::string k = line.substr(0, eq), v = line.substr(eq + 1); auto trim2 = [&](std::string& s){ size_t a=s.find_first_not_of(" \t\r\n"); size_t b=s.find_last_not_of(" \t\r\n"); if (a==std::string::npos) { s.clear(); return; } s=s.substr(a,b-a+1); };
+        trim2(k); trim2(v); std::string K = k; for (char& c : K) c = (char)std::toupper((unsigned char)c);
+        if (inPiece) { if (pm_processPieceProperty(cur, K, v, base, rot0, rot1, rot2, rot3, rotExplicit)) continue; }
+        else {
+            if (section == "SET") { if (K == "NAME") { /* optional */ continue; } if (K == "PREVIEWGRID" || K == "PREVIEW_GRID") { int n; if (pm_parseInt(v, n) && n > 0 && n <= 10) g_previewGrid = n; continue; } }
+            if (section == "RANDOMIZER") { if (K == "TYPE") { std::string vv = v; for (char& c : vv) c = (char)std::tolower((unsigned char)c); g_randomizerType = (vv == "bag" ? (RandType)1 : (RandType)0); continue; }
+                if (K == "BAGSIZE") { int n; if (pm_parseInt(v, n) && n >= 0) g_randBagSize = n; continue; } }
+        }
+    }
+    flushPiece(); return !PIECES.empty();
 }
 
 void PieceManager::seedFallback() {

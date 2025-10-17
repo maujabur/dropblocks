@@ -23,6 +23,9 @@
 // TODO: Produce a statically-linked Windows build; verify required DLLs
 // TODO: Produce a successful Raspberry Pi build
 // TODO: Add HUD region showing dropped piece counts by type
+// DESIRED: convert the config manager to a component that can be reused by other applications  
+// DESIRED: convert all itens possible to components that can be reused by other applications
+// REMEMBER: to ask about the parser
 
 #include <SDL2/SDL.h>
 #include "include/render/RenderLayer.hpp"
@@ -501,17 +504,7 @@ static int   GAP1_SCALE        = 10;       // banner ↔ tabuleiro (x scale)
 static int   GAP2_SCALE        = 10;       // tabuleiro ↔ painel  (x scale)
 
 // Deprecated globals (replaced by VisualEffectsView bridge); kept only to satisfy legacy code paths if any
-static bool  ENABLE_BANNER_SWEEP = true;
-static bool  ENABLE_GLOBAL_SWEEP = true;
-static float SWEEP_SPEED_PXPS  = 15.0f;
-static int   SWEEP_BAND_H_S    = 30;
-static int   SWEEP_ALPHA_MAX   = 100;
-static float SWEEP_SOFTNESS    = 0.7f;
-static float SWEEP_G_SPEED_PXPS = 20.0f;
-static int   SWEEP_G_BAND_H_PX  = 100;
-static int   SWEEP_G_ALPHA_MAX  = 50;
-static float SWEEP_G_SOFTNESS   = 0.9f;
-static int   SCANLINE_ALPHA     = 20;
+/* removed legacy visual globals; use db_getVisualEffects() instead */
 
 // Caminho opcional indicado no cfg para o arquivo de peças
 std::string PIECES_FILE_PATH = "";
@@ -602,7 +595,7 @@ class PieceManager;
 class JoystickSystem;
 
 // Forward declarations for functions that use pieceManager
-static bool loadPiecesFromStream(std::istream& in);
+// moved to PieceManager: bool pm_loadPiecesFromStream(std::istream& in)
 static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick);
 
 // Temporary global variables eliminated - now using PieceManager private fields
@@ -1008,7 +1001,7 @@ static void loadConfigFile(AudioSystem& audio, JoystickSystem& joystick){
 
 
 // Funções auxiliares para parsing de peças
-static std::string parsePiecesLine(const std::string& line) {
+/* moved to src/pieces/PieceManager.cpp: pm_parsePiecesLine
     size_t semi = line.find(';');
     size_t cut = std::string::npos;
     
@@ -1039,134 +1032,21 @@ static std::string parsePiecesLine(const std::string& line) {
         return result;
     }
     return line;
-}
+*/
 
-static void buildPieceRotations(Piece& piece, const std::vector<std::pair<int,int>>& base, 
-                               const std::vector<std::pair<int,int>>& rot0,
-                               const std::vector<std::pair<int,int>>& rot1,
-                               const std::vector<std::pair<int,int>>& rot2,
-                               const std::vector<std::pair<int,int>>& rot3,
-                               bool rotExplicit) {
-    piece.rot.clear();
-    
-    if (rotExplicit) {
-        if (!rot0.empty()) {
-            piece.rot.push_back(rot0);
-            piece.rot.push_back(rot1.empty() ? rot0 : rot1);
-            piece.rot.push_back(rot2.empty() ? rot0 : rot2);
-            piece.rot.push_back(rot3.empty() ? (rot1.empty() ? rot0 : rot1) : rot3);
-        }
-    } else {
-        if (!base.empty()) {
-            std::vector<std::pair<int,int>> r0 = base, r1 = base, r2 = base, r3 = base;
-            rotate90(r1);
-            r2 = r1; rotate90(r2);
-            r3 = r2; rotate90(r3);
-            piece.rot.push_back(r0);
-            piece.rot.push_back(r1);
-            piece.rot.push_back(r2);
-            piece.rot.push_back(r3);
-        }
-    }
-}
+/* moved to src/pieces/PieceManager.cpp: pm_buildPieceRotations */
 
-static bool processPieceProperty(Piece& cur, const std::string& key, const std::string& val,
-                                std::vector<std::pair<int,int>>& base,
-                                std::vector<std::pair<int,int>>& rot0,
-                                std::vector<std::pair<int,int>>& rot1,
-                                std::vector<std::pair<int,int>>& rot2,
-                                std::vector<std::pair<int,int>>& rot3,
-                                bool& rotExplicit) {
-    if (key == "COLOR") { 
-        Uint8 r, g, b; 
-        if (parseHexColor(val, r, g, b)) { 
-            cur.r = r; cur.g = g; cur.b = b; 
-        } 
-        return true; 
-    }
-    if (key == "ROTATIONS") { 
-        std::string vv = val; 
-        for (char& c : vv) c = (char)std::tolower((unsigned char)c); 
-        rotExplicit = (vv == "explicit"); 
-        return true; 
-    }
-    if (key == "BASE") { 
-        parseCoordList(val, base); 
-        return true; 
-    }
-    if (key == "ROT0") { 
-        if (val.rfind("sameas:", 0) == 0) { /* usa rot0 */ } 
-        else parseCoordList(val, rot0); 
-        rotExplicit = true; 
-        return true; 
-    }
-    if (key == "ROT1") { 
-        if (val.rfind("sameas:", 0) == 0) { rot1 = rot0; } 
-        else parseCoordList(val, rot1); 
-        rotExplicit = true; 
-        return true; 
-    }
-    if (key == "ROT2") { 
-        if (val.rfind("sameas:", 0) == 0) { rot2 = rot0; } 
-        else parseCoordList(val, rot2); 
-        rotExplicit = true; 
-        return true; 
-    }
-    if (key == "ROT3") { 
-        if (val.rfind("sameas:", 0) == 0) { rot3 = rot1.empty() ? rot0 : rot1; } 
-        else parseCoordList(val, rot3); 
-        rotExplicit = true; 
-        return true; 
-    }
-    if (key == "KICKS.CW") { 
-        parseKicks(val, cur.kicksCW); 
-        cur.hasKicks = true; 
-        return true; 
-    }
-    if (key == "KICKS.CCW") { 
-        parseKicks(val, cur.kicksCCW); 
-        cur.hasKicks = true; 
-        return true; 
-    }
-    
-    auto setKPT = [&](int dirIdx, int fromState, const std::string& val) {
-        std::vector<std::pair<int,int>> tmp;
-        if (parseCoordList(val, tmp)) {
-            cur.kicksPerTrans[dirIdx][fromState] = tmp;
-            cur.hasPerTransKicks = true;
-            return true;
-        }
-        return false;
-    };
-
-    // KICKS.CW.0TO1 / 1TO2 / 2TO3 / 3TO0
-    if (key.rfind("KICKS.CW.", 0) == 0) {
-        std::string t = key.substr(10); // depois de "KICKS.CW."
-        if (t == "0TO1") { setKPT(0, 0, val); return true; }
-        if (t == "1TO2") { setKPT(0, 1, val); return true; }
-        if (t == "2TO3") { setKPT(0, 2, val); return true; }
-        if (t == "3TO0") { setKPT(0, 3, val); return true; }
-    }
-    // KICKS.CCW.0TO3 / 3TO2 / 2TO1 / 1TO0
-    if (key.rfind("KICKS.CCW.", 0) == 0) {
-        std::string t = key.substr(11); // depois de "KICKS.CCW."
-        if (t == "0TO3") { setKPT(1, 0, val); return true; }
-        if (t == "3TO2") { setKPT(1, 3, val); return true; }
-        if (t == "2TO1") { setKPT(1, 2, val); return true; }
-        if (t == "1TO0") { setKPT(1, 1, val); return true; }
-    }
-    
-    return false;
-}
+/* moved to src/pieces/PieceManager.cpp: pm_processPieceProperty */
 
 // loadPiecesFromStream moved after pieceManager definition
 
+extern bool pm_loadPiecesFromStream(std::istream&);
 bool db_loadPiecesPath(const std::string& p){
     std::ifstream f(p.c_str()); 
     if(!f.good()) {
         return false;
     }
-    bool ok=loadPiecesFromStream(f);
+    bool ok=pm_loadPiecesFromStream(f);
     SDL_Log("Pieces carregado de: %s (%s)", p.c_str(), ok?"OK":"vazio/erro");
     return ok;
 }
@@ -1272,7 +1152,7 @@ static void rotateWithKicks(Active& act, const std::vector<std::vector<Cell>>& g
 // ===========================
 //   FONTE 5x7 PIXEL
 // ===========================
-// moved to src/render/Primitives.cpp
+/* moved to src/render/Primitives.cpp
 static bool glyph(char c, int x, int y){
     auto at=[&](const char* rows[7]){ return rows[y][x]=='#'; };
     static const char* NUM[10][7] = {
@@ -1379,7 +1259,7 @@ void drawRoundedOutline(SDL_Renderer* r, int x, int y, int w, int h, int rad, in
         drawRoundedFilled(r, x+i, y+i, w-2*i, h-2*i, std::max(0,rad-i), R,G,B,A);
     }
 }
-// end primitives moved
+*/
 
 // ===========================
 //   UTILITÁRIOS
@@ -1410,7 +1290,7 @@ static bool saveScreenshot(SDL_Renderer* ren, const char* path) {
  * 
  * Handles SDL audio device initialization, cleanup, and basic sound generation
  */
-// moved to src/audio/AudioSystem.cpp
+/* moved to src/audio/AudioSystem.cpp
 class AudioDevice {
 private:
     SDL_AudioDeviceID device_ = 0;
@@ -1685,14 +1565,14 @@ public:
     bool enableComboSounds = true;
     bool enableLevelUpSounds = true;
 };
-// end audio moved
+*/
 
 // ===========================
 //   IMPLEMENTAÇÕES DO SISTEMA DE CONFIGURAÇÃO
 // ===========================
 
 // Implementação do VisualConfigParser
-// moved to src/ConfigManager.cpp
+/* moved to src/ConfigManager.cpp
 bool VisualConfigParser::parseBool(const std::string& value) const {
     std::string v = value;
     for (char& c : v) c = (char)std::tolower((unsigned char)c);
@@ -2132,7 +2012,7 @@ bool ConfigManager::validate() const {
            inputParser.validate() && piecesParser.validate() && 
            gameParser.validate();
 }
-// end config moved
+*/
 
 // ===========================
 //   FUNÇÕES DE APLICAÇÃO DE CONFIGURAÇÃO
@@ -2249,17 +2129,7 @@ static void applyConfigToTheme(const VisualConfig& config) {
     themeManager.getTheme().overlay_sub_b = config.colors.overlaySub.b;
     
     // Apply effects
-    ENABLE_BANNER_SWEEP = config.effects.bannerSweep;
-    ENABLE_GLOBAL_SWEEP = config.effects.globalSweep;
-    SWEEP_SPEED_PXPS = config.effects.sweepSpeedPxps;
-    SWEEP_BAND_H_S = config.effects.sweepBandHS;
-    SWEEP_ALPHA_MAX = config.effects.sweepAlphaMax;
-    SWEEP_SOFTNESS = config.effects.sweepSoftness;
-    SWEEP_G_SPEED_PXPS = config.effects.sweepGSpeedPxps;
-    SWEEP_G_BAND_H_PX = config.effects.sweepGBandHPx;
-    SWEEP_G_ALPHA_MAX = config.effects.sweepGAlphaMax;
-    SWEEP_G_SOFTNESS = config.effects.sweepGSoftness;
-    SCANLINE_ALPHA = config.effects.scanlineAlpha;
+    // Visual effects now flow via g_visualView and bridge only
     g_visualView.bannerSweep = config.effects.bannerSweep;
     g_visualView.globalSweep = config.effects.globalSweep;
     g_visualView.sweepSpeedPxps = config.effects.sweepSpeedPxps;
@@ -3156,96 +3026,7 @@ PieceManager pieceManager;
 static bool loadPiecesFile(){ return pieceManager.loadPiecesFile(); }
 static void seedPiecesFallback(){ pieceManager.seedFallback(); }
 
-static bool loadPiecesFromStream(std::istream& in) {
-    PIECES.clear(); 
-    pieceManager.setRandomizerType(RandType::SIMPLE); 
-    pieceManager.setRandBagSize(0);
-
-    std::string line, section;
-    Piece cur; 
-    bool inPiece = false; 
-    bool rotExplicit = false;
-    std::vector<std::pair<int,int>> rot0, rot1, rot2, rot3, base;
-
-    auto flushPiece = [&]() {
-        if (!inPiece) return;
-        
-        buildPieceRotations(cur, base, rot0, rot1, rot2, rot3, rotExplicit);
-        
-        if (!cur.rot.empty()) {
-            PIECES.push_back(cur);
-        }
-        
-        cur = Piece{}; 
-        rotExplicit = false; 
-        rot0.clear(); rot1.clear(); rot2.clear(); rot3.clear(); base.clear(); 
-        inPiece = false;
-    };
-
-    while (std::getline(in, line)) {
-        line = parsePiecesLine(line);
-        trim(line); 
-        if (line.empty()) continue;
-
-        if (line.front() == '[' && line.back() == ']') {
-            std::string sec = line.substr(1, line.size() - 2);
-            std::string SEC = sec; 
-            for (char& c : SEC) c = (char)std::toupper((unsigned char)c);
-            
-            if (SEC.rfind("PIECE.", 0) == 0) {
-                flushPiece(); 
-                inPiece = true; 
-                cur = Piece{}; 
-                rotExplicit = false;
-                rot0.clear(); rot1.clear(); rot2.clear(); rot3.clear(); base.clear();
-                cur.name = sec.substr(6);
-            } else {
-                flushPiece(); 
-                inPiece = false; 
-                section = SEC;
-            }
-            continue;
-        }
-
-        size_t eq = line.find('='); 
-        if (eq == std::string::npos) continue;
-        
-        std::string k = line.substr(0, eq), v = line.substr(eq + 1); 
-        trim(k); trim(v);
-        std::string K = k; 
-        for (char& c : K) c = (char)std::toupper((unsigned char)c);
-
-        if (inPiece) {
-            if (processPieceProperty(cur, K, v, base, rot0, rot1, rot2, rot3, rotExplicit)) {
-                continue;
-            }
-        } else {
-            if (section == "SET") {
-                if (K == "NAME") { /* opcional */ continue; }
-                if (K == "PREVIEWGRID" || K == "PREVIEW_GRID") { 
-                    int n; 
-                    if (parseInt(v, n) && n > 0 && n <= 10) pieceManager.setPreviewGrid(n); 
-                    continue; 
-                }
-            }
-            if (section == "RANDOMIZER") {
-                if (K == "TYPE") { 
-                    std::string vv = v; 
-                    for (char& c : vv) c = (char)std::tolower((unsigned char)c);
-                    pieceManager.setRandomizerType(vv == "bag" ? RandType::BAG : RandType::SIMPLE); 
-                    continue; 
-                }
-                if (K == "BAGSIZE") { 
-                    int n; 
-                    if (parseInt(v, n) && n >= 0) pieceManager.setRandBagSize(n); 
-                    continue; 
-                }
-            }
-        }
-    }
-    flushPiece();
-    return !PIECES.empty();
-}
+/* moved to src/pieces/PieceManager.cpp: pm_loadPiecesFromStream */
 
 static bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick) {
     auto seti = [&](const char* K, int& ref) { 
@@ -4020,12 +3801,9 @@ void GameState::render(RenderManager& renderManager, const LayoutCache& layout) 
 //   FUNÇÕES DE RENDERIZAÇÃO (LEGADO - MANTIDAS PARA COMPATIBILIDADE)
 // ===========================
 
-static void renderBackground(SDL_Renderer* ren, const LayoutCache& layout) {
-    SDL_SetRenderDrawColor(ren, themeManager.getTheme().bg_r, themeManager.getTheme().bg_g, themeManager.getTheme().bg_b, 255);
-    SDL_RenderClear(ren);
-}
+/* legacy render helpers removed; rendering is handled by src/render/Layers.cpp via RenderManager */
 
-static void renderBanner(SDL_Renderer* ren, const LayoutCache& layout, AudioSystem& audio) {
+/* static void renderBanner(SDL_Renderer* ren, const LayoutCache& layout, AudioSystem& audio) {
     // Banner
     drawRoundedFilled(ren, layout.BX, layout.BY, layout.BW, layout.BH, 10, 
                      themeManager.getTheme().banner_bg_r, themeManager.getTheme().banner_bg_g, themeManager.getTheme().banner_bg_b, 255);
@@ -4077,9 +3855,9 @@ static void renderBanner(SDL_Renderer* ren, const LayoutCache& layout, AudioSyst
         // Som de sweep
         audio.playSweepEffect();
     }
-}
+} */
 
-static void renderBoard(SDL_Renderer* ren, const GameState& state, const LayoutCache& layout) {
+/* static void renderBoard(SDL_Renderer* ren, const GameState& state, const LayoutCache& layout) {
     // Tabuleiro vazio
     for (int y = 0; y < ROWS; ++y) {
         for (int x = 0; x < COLS; ++x) {
@@ -4111,9 +3889,9 @@ static void renderBoard(SDL_Renderer* ren, const GameState& state, const LayoutC
         SDL_SetRenderDrawColor(ren, pc.r, pc.g, pc.b, 255); 
         SDL_RenderFillRect(ren, &r);
     }
-}
+} */
 
-static void renderHUD(SDL_Renderer* ren, const GameState& state, const LayoutCache& layout) {
+/* static void renderHUD(SDL_Renderer* ren, const GameState& state, const LayoutCache& layout) {
     // Painel (HUD)
     drawRoundedFilled(ren, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 
                      themeManager.getTheme().panel_fill_r, themeManager.getTheme().panel_fill_g, themeManager.getTheme().panel_fill_b, 255);
@@ -4188,9 +3966,9 @@ static void renderHUD(SDL_Renderer* ren, const GameState& state, const LayoutCac
             SDL_RenderFillRect(ren, &r);
         }
     }
-}
+} */
 
-static void renderOverlay(SDL_Renderer* ren, const GameState& state, const LayoutCache& layout) {
+/* static void renderOverlay(SDL_Renderer* ren, const GameState& state, const LayoutCache& layout) {
     if (state.gameover || state.paused) {
         const std::string topText = state.paused ? "PAUSE" : "GAME OVER";
         const std::string subText = state.paused ? "" : "PRESS START";
@@ -4210,9 +3988,9 @@ static void renderOverlay(SDL_Renderer* ren, const GameState& state, const Layou
             drawPixelTextOutlined(ren, sx, sy, subText, layout.scale, themeManager.getTheme().overlay_sub_r, themeManager.getTheme().overlay_sub_g, themeManager.getTheme().overlay_sub_b, 0, 0, 0);
         }
     }
-}
+} */
 
-static void renderPostEffects(SDL_Renderer* ren, const LayoutCache& layout, AudioSystem& audio) {
+/* static void renderPostEffects(SDL_Renderer* ren, const LayoutCache& layout, AudioSystem& audio) {
     // Scanlines
     const auto& vis = db_getVisualEffects();
     if (vis.scanlineAlpha > 0) {
@@ -4248,7 +4026,7 @@ static void renderPostEffects(SDL_Renderer* ren, const LayoutCache& layout, Audi
         }
         SDL_SetRenderDrawBlendMode(ren, SDL_BLENDMODE_NONE);
     }
-}
+} */
 
 // ===========================
 //   MAIN E CONTROLES
