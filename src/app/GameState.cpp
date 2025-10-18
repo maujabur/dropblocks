@@ -85,6 +85,7 @@ void GameState::reset() {
     gameover_ = false;
     paused_ = false;
     lastTick_ = SDL_GetTicks();
+    resetPieceStats();
 }
 
 void GameState::restartRound() {
@@ -95,6 +96,7 @@ void GameState::restartRound() {
     }
     int first = pieces_ ? pieces_->getNextPiece() : 0;
     newActive(activePiece_, first);
+    incrementPieceStat(first);
     if (pieces_) pieces_->setNextPiece(pieces_->getNextPiece());
     setLastTick(SDL_GetTicks());
     if (input_) input_->resetTimers();
@@ -129,7 +131,9 @@ void GameState::updatePiece() {
             combo_.reset();
         }
         
-        newActive(activePiece_, pieces_->getCurrentNextPiece());
+        int nextPiece = pieces_->getCurrentNextPiece();
+        newActive(activePiece_, nextPiece);
+        incrementPieceStat(nextPiece);
         pieces_->setNextPiece(pieces_->getNextPiece());
         if (board_.isGameOver(activePiece_)) {
             gameover_ = true;
@@ -241,5 +245,26 @@ void GameState::handleInput(SDL_Renderer* renderer) {
             audio_->playRotationSound(true);
             input_->resetTimers();
         }
+    }
+}
+
+const std::vector<int>& GameState::getPieceStats() const {
+    return pieceStats_;
+}
+
+void GameState::incrementPieceStat(int pieceIdx) {
+    if (pieceIdx < 0) return;
+    // Expandir o vetor se necessário
+    if (pieceIdx >= (int)pieceStats_.size()) {
+        pieceStats_.resize(pieceIdx + 1, 0);
+    }
+    pieceStats_[pieceIdx]++;
+}
+
+void GameState::resetPieceStats() {
+    pieceStats_.clear();
+    // Inicializar com zeros para todas as peças conhecidas
+    if (!PIECES.empty()) {
+        pieceStats_.resize(PIECES.size(), 0);
     }
 }

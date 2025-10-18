@@ -1,5 +1,6 @@
 #include "render/LayoutCache.hpp"
 #include "render/GameStateBridge.hpp"
+#include "render/Primitives.hpp"
 #include <SDL2/SDL.h>
 #include <algorithm>
 
@@ -47,7 +48,20 @@ void db_layoutCalculate(LayoutCache& layout) {
     layout.BY = layout.CY + (layout.CH - layout.GH) / 2;
     layout.BW = layout.bannerW;
     layout.BH = layout.GH;
-    layout.GX = layout.BX + layout.BW + layout.GAP1;
+    
+    // Calcular largura da caixa de estatísticas
+    int cellSize = layout.cellBoard + 4;
+    int numberScale = std::max(1, layout.scale / 2);
+    int maxCountW = textWidthPx("999", numberScale);
+    int innerPad = 16;
+    int titleW = textWidthPx("PIECES", layout.scale);
+    int contentW = innerPad + cellSize + 8 + maxCountW + innerPad;
+    int titleMinW = titleW + 24;
+    layout.statsBoxW = std::max(contentW, titleMinW);
+    layout.statsMargin = 5;
+    
+    // Posição do tabuleiro: após banner + margin + statsBox + margin
+    layout.GX = layout.BX + layout.BW + layout.statsMargin + layout.statsBoxW + layout.statsMargin;
     layout.GY = layout.BY;
     layout.panelX = layout.GX + layout.GW + layout.GAP2;
     layout.panelW = layout.CX + layout.CW - layout.panelX - BORDER;

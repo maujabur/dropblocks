@@ -44,6 +44,11 @@ struct Theme {
     Uint8 next_grid_dark_r=24, next_grid_dark_g=24, next_grid_dark_b=24;
     Uint8 next_grid_light_r=30, next_grid_light_g=30, next_grid_light_b=30;
     bool  next_grid_use_rgb=false;
+    
+    // PIECE STATS
+    Uint8 stats_label_r=200, stats_label_g=200, stats_label_b=220;
+    Uint8 stats_count_r=255, stats_count_g=255, stats_count_b=180;
+    Uint8 stats_piece_name_r=180, stats_piece_name_g=220, stats_piece_name_b=255;
 
     // overlay
     Uint8 overlay_fill_r=0, overlay_fill_g=0, overlay_fill_b=0, overlay_fill_a=200;

@@ -60,6 +60,11 @@ int db_getLevel(const GameState& state) {
     return state.getLevelValue();
 }
 
+bool db_getPieceStats(const GameState& state, const std::vector<int>*& stats) {
+    stats = &state.getPieceStats();
+    return true;
+}
+
 bool db_isRunning(const GameState& state) {
     return state.isRunning();
 }

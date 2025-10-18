@@ -55,12 +55,10 @@ void AudioSystem::playGameOverSound() { if (getConfig().enableLevelUpSounds){ fl
 void AudioSystem::playComboSound(int combo) { if (getConfig().enableComboSounds && combo>1){ double f=440.0+(combo*50.0); float v=(0.15f+combo*0.02f)*getConfig().masterVolume*getConfig().sfxVolume; impl_->device.playBeep(f, 100+combo*20, v, true);} }
 void AudioSystem::playTetrisSound() { if (getConfig().enableComboSounds){ int notes[]={1,5,8,12}; float v=0.20f*getConfig().masterVolume*getConfig().sfxVolume; impl_->device.playArpeggio(220.0, notes, 4, 50, v);} }
 void AudioSystem::playBackgroundMelody(int level) { if (!getConfig().enableAmbientSounds) return; Uint32 now=SDL_GetTicks(); if (now-impl_->lastMelody>3000){ double base=220.0+(level*20.0); double melody[]={1.0,1.25,1.5,1.875,2.0}; for(int i=0;i<3;i++){ double f=base*melody[i%5]; float v=0.05f*getConfig().ambientVolume*getConfig().masterVolume; impl_->device.playBeep(f,200,v,false);} impl_->lastMelody=now; } }
-void AudioSystem::playTensionSound(int filledRows) { if (!getConfig().enableAmbientSounds || filledRows<5) return; Uint32 now=SDL_GetTicks(); if (now-impl_->lastTension>1000){ float v=0.08f*getConfig().ambientVolume*getConfig().masterVolume; impl_->device.playBeep(80.0,300,v,true); impl_->lastTension=now; } }
+void AudioSystem::playTensionSound(int filledRows) { if (!getConfig().enableAmbientSounds || filledRows<6) return; Uint32 now=SDL_GetTicks(); if (now-impl_->lastTension>1000){ float v=0.08f*getConfig().ambientVolume*getConfig().masterVolume; impl_->device.playBeep(80.0,300,v,true); impl_->lastTension=now; } }
 void AudioSystem::playSweepEffect() { if (!getConfig().enableAmbientSounds) return; Uint32 now=SDL_GetTicks(); if (now-impl_->lastSweepSound>2000){ float v=0.03f*getConfig().ambientVolume*getConfig().masterVolume; impl_->device.playBeep(50.0,100,v,false); impl_->lastSweepSound=now; } }
 void AudioSystem::playScanlineEffect() { if (!getConfig().enableAmbientSounds) return; Uint32 now=SDL_GetTicks(); if (now-impl_->lastScanlineSound>5000){ float v=0.02f*getConfig().ambientVolume*getConfig().masterVolume; impl_->device.playBeep(15.0,200,v,true); impl_->lastScanlineSound=now; } }
 bool AudioSystem::loadFromConfig(const std::string& key, const std::string& value) { return getConfig().loadFromConfig(key, value); }
 
 AudioConfig& AudioSystem::getConfig() { return impl_->config; }
 const AudioConfig& AudioSystem::getConfig() const { return impl_->config; }
-
-

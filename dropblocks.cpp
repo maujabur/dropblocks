@@ -15,86 +15,56 @@
  * See docs/DEVELOPMENT_NOTES.md for TODOs and future improvements
  */
 
+// SDL2
 #include <SDL2/SDL.h>
-#include "render/RenderLayer.hpp"
-#include "render/RenderManager.hpp"
-#include "render/LayoutCache.hpp"
+
+// Application modules
 #include "app/GameInitializer.hpp"
 #include "app/GameLoop.hpp"
 #include "app/GameCleanup.hpp"
-#include "render/Primitives.hpp"
+#include "app/GameState.hpp"
+
+// Rendering
+#include "render/RenderManager.hpp"
 #include "render/Layers.hpp"
-#include "ConfigManager.hpp"
-#include "config/ConfigProcessors.hpp"
-#include "config/ConfigApplicator.hpp"
-#include "input/IInputManager.hpp"
-#include "DebugLogger.hpp"
-#include "input/InputHandler.hpp"
-#include "input/KeyboardInput.hpp"
-#include "input/JoystickInput.hpp"
+
+// Input
 #include "input/InputManager.hpp"
-#include "ThemeManager.hpp"
-#include "pieces/Piece.hpp"
 #include "audio/AudioSystem.hpp"
+
+// Configuration
+#include "ConfigManager.hpp"
+
+// Utilities
+#include "DebugLogger.hpp"
+
+// Pieces and Theme (for global instances)
 #include "pieces/PieceManager.hpp"
 #include "render/GameStateBridge.hpp"
-#include "game/Mechanics.hpp"
-#include "app/GameTypes.hpp"
-#include "app/ComboSystem.hpp"
-#include "app/GameBoard.hpp"
-#include "app/ScoreSystem.hpp"
-#include "app/GameState.hpp"
-#include "app/GameHelpers.hpp"
+#include "pieces/Piece.hpp"
+#include "ThemeManager.hpp"
 #include "ConfigTypes.hpp"
-#include "util/UiUtil.hpp"
+
+// DI Container
+#include "Interfaces.hpp"
+#include "di/DependencyContainer.hpp"
 
 // STL
 #include <vector>
 #include <string>
-#include <ctime>
-#include <cstdlib>
-#include <functional>
-#include <map>
-#include <stdexcept>
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <cctype>
-#include <cstring>
-#include <fstream>
-#include <sstream>
-#include <random>
-#include <array>
 #include <memory>
 
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "7.0"
+#define DROPBLOCKS_VERSION "8.0"
 #define DROPBLOCKS_BUILD_INFO "Major Refactoring Complete"
-#define DROPBLOCKS_FEATURES "Modular architecture: 661→328 lines (-50%); ConfigApplicator, GameInit, cleaned globals"
+#define DROPBLOCKS_FEATURES "Modular architecture: 661→209 lines (-68%); 8 new modules; bridge functions extracted"
 
-// ===========================
-//   FORWARD DECLARATIONS
-// ===========================
-// Forward declarations for structures
-struct Theme;
-struct Piece;
-enum class RandType;
-struct VisualConfig;
-struct AudioConfig;
-struct InputConfig;
-struct PiecesConfig;
-struct GameConfig;
-
-// Use canonical interfaces
-#include "Interfaces.hpp"
-#include "di/DependencyContainer.hpp"
-
+// Math constant (if not defined by system)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-
 
 // ===========================
 //   GLOBAL CONFIGURATION
@@ -187,6 +157,7 @@ int main(int, char**) {
     RenderManager renderManager(ren);
     renderManager.addLayer(std::make_unique<BackgroundLayer>());
     renderManager.addLayer(std::make_unique<BannerLayer>(&audio));
+    renderManager.addLayer(std::make_unique<PieceStatsLayer>());
     renderManager.addLayer(std::make_unique<BoardLayer>());
     renderManager.addLayer(std::make_unique<HUDLayer>());
     renderManager.addLayer(std::make_unique<OverlayLayer>());

@@ -54,6 +54,15 @@ bool ThemeManager::loadFromConfig(const std::string& key, const std::string& val
     if (key == "BG") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.bg_r=r; theme_.bg_g=g; theme_.bg_b=b; return true; }
     }
+    if (key == "STATS_LABEL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_label_r=r; theme_.stats_label_g=g; theme_.stats_label_b=b; return true; }
+    }
+    if (key == "STATS_COUNT") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_count_r=r; theme_.stats_count_g=g; theme_.stats_count_b=b; return true; }
+    }
+    if (key == "STATS_PIECE_NAME") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_piece_name_r=r; theme_.stats_piece_name_g=g; theme_.stats_piece_name_b=b; return true; }
+    }
     return false;
 }
 

@@ -136,51 +136,74 @@ void BoardLayer::render(SDL_Renderer* renderer, const GameState& state, const La
         }
     }
 }
-int BoardLayer::getZOrder() const { return 2; }
 std::string BoardLayer::getName() const { return "Board"; }
 
 // HUDLayer
 void HUDLayer::render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) {
+    // Painel principal do HUD (à direita)
     drawRoundedFilled(renderer, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12,
                       themeManager.getTheme().panel_fill_r, themeManager.getTheme().panel_fill_g, themeManager.getTheme().panel_fill_b, 255);
     drawRoundedOutline(renderer, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 2,
                        themeManager.getTheme().panel_outline_r, themeManager.getTheme().panel_outline_g, themeManager.getTheme().panel_outline_b, themeManager.getTheme().panel_outline_a);
+    
     int tx = layout.panelX + 14, ty = layout.panelY + 14;
     auto fmtScore = [](int s){ char b[32]; std::snprintf(b,sizeof(b), "%d", s); return std::string(b); };
     int score = db_getScore(state);
     int lines = db_getLines(state);
     int level = db_getLevel(state);
-    drawPixelText(renderer, tx, ty, "SCORE", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 10 * layout.scale;
-    drawPixelText(renderer, tx, ty, fmtScore(score), layout.scale + 1, themeManager.getTheme().hud_score_r, themeManager.getTheme().hud_score_g, themeManager.getTheme().hud_score_b); ty += 12 * (layout.scale + 1);
-    drawPixelText(renderer, tx, ty, "LINES", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 8 * layout.scale;
-    drawPixelText(renderer, tx, ty, std::to_string(lines), layout.scale, themeManager.getTheme().hud_lines_r, themeManager.getTheme().hud_lines_g, themeManager.getTheme().hud_lines_b); ty += 10 * layout.scale;
-    drawPixelText(renderer, tx, ty, "LEVEL", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); ty += 8 * layout.scale;
-    drawPixelText(renderer, tx, ty, std::to_string(level), layout.scale, themeManager.getTheme().hud_level_r, themeManager.getTheme().hud_level_g, themeManager.getTheme().hud_level_b); ty += 10 * layout.scale;
-
-    // NEXT preview (mesma escala do tabuleiro) com grid de fundo
-    ty += 6 * layout.scale;
-    drawPixelText(renderer, tx, ty, "NEXT", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b);
+    
+    // Score, Lines, Level (centralizados)
+    drawPixelText(renderer, tx, ty, "SCORE", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
     ty += 10 * layout.scale;
-    int nextIdx = 0; if (!db_getNextIdx(state, nextIdx)) return;
+    drawPixelText(renderer, tx, ty, fmtScore(score), layout.scale + 1, themeManager.getTheme().hud_score_r, themeManager.getTheme().hud_score_g, themeManager.getTheme().hud_score_b); 
+    ty += 12 * (layout.scale + 1);
+    drawPixelText(renderer, tx, ty, "LINES", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
+    ty += 10 * layout.scale;
+    drawPixelText(renderer, tx, ty, std::to_string(lines), layout.scale, themeManager.getTheme().hud_lines_r, themeManager.getTheme().hud_lines_g, themeManager.getTheme().hud_lines_b); 
+    ty += 12 * layout.scale;
+    drawPixelText(renderer, tx, ty, "LEVEL", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
+    ty += 10 * layout.scale;
+    drawPixelText(renderer, tx, ty, std::to_string(level), layout.scale, themeManager.getTheme().hud_level_r, themeManager.getTheme().hud_level_g, themeManager.getTheme().hud_level_b); 
+    ty += 12 * layout.scale;
+
+    // NEXT preview - abaixo do score, centralizado
+    ty += 6 * layout.scale;
+    int nextIdx = 0; 
+    if (!db_getNextIdx(state, nextIdx)) return;
     int gridCols = std::max(4, std::min(10, pieceManager.getPreviewGrid()));
     int gridRows = gridCols;
-    int cellMini = layout.cellBoard; // mesma escala do tabuleiro
+    int cellMini = layout.cellBoard;
     int gridW = gridCols * cellMini, gridH = gridRows * cellMini;
-    int gridX = layout.panelX + (layout.panelW - gridW) / 2;
-    int gridY = ty;
+    int pad = 10;
+    int labelH = 10 * layout.scale;
+    int nextBoxW = gridW + pad * 2;
+    int nextBoxH = gridH + pad * 2 + labelH;
+    
+    // Centralizar NEXT no painel
+    int nextBoxX = layout.panelX + (layout.panelW - nextBoxW) / 2;
+    int nextBoxY = ty;
+    int gridX = nextBoxX + pad;
+    int gridY = nextBoxY + pad;
+    
     // Caixa arredondada para o NEXT
-    {
-        int pad = 10;
-        int boxX = gridX - pad;
-        int boxY = gridY - pad;
-        int boxW = gridW + pad * 2;
-        int boxH = gridH + pad * 2;
-        drawRoundedFilled(renderer, boxX, boxY, boxW, boxH, 10,
-                          themeManager.getTheme().next_fill_r, themeManager.getTheme().next_fill_g, themeManager.getTheme().next_fill_b, 255);
-        drawRoundedOutline(renderer, boxX, boxY, boxW, boxH, 10, 2,
-                           themeManager.getTheme().next_outline_r, themeManager.getTheme().next_outline_g, themeManager.getTheme().next_outline_b, themeManager.getTheme().next_outline_a);
-    }
-    // Desenha grid xadrez
+    drawRoundedFilled(renderer, nextBoxX, nextBoxY, nextBoxW, nextBoxH, 10,
+                      themeManager.getTheme().next_fill_r, themeManager.getTheme().next_fill_g, themeManager.getTheme().next_fill_b, 255);
+    drawRoundedOutline(renderer, nextBoxX, nextBoxY, nextBoxW, nextBoxH, 10, 2,
+                       themeManager.getTheme().next_outline_r, themeManager.getTheme().next_outline_g, themeManager.getTheme().next_outline_b, themeManager.getTheme().next_outline_a);
+    
+    // Texto "NEXT" centralizado dentro da caixa
+    std::string nextText = "NEXT";
+    int nextW = textWidthPx(nextText, layout.scale);
+    int nextTextX = nextBoxX + (nextBoxW - nextW) / 2;
+    int nextTextY = nextBoxY + pad / 2;
+    drawPixelText(renderer, nextTextX, nextTextY, nextText, layout.scale, 
+                 themeManager.getTheme().hud_label_r, 
+                 themeManager.getTheme().hud_label_g, 
+                 themeManager.getTheme().hud_label_b);
+    
+    gridY += labelH;
+    
+    // Desenha grid xadrez do NEXT
     for (int gy = 0; gy < gridRows; ++gy) {
         for (int gx = 0; gx < gridCols; ++gx) {
             SDL_Rect q{gridX + gx * cellMini, gridY + gy * cellMini, cellMini - 1, cellMini - 1};
@@ -197,12 +220,18 @@ void HUDLayer::render(SDL_Renderer* renderer, const GameState& state, const Layo
             SDL_RenderFillRect(renderer, &q);
         }
     }
-    // Desenha peça centralizada no grid
+    
+    // Desenha peça centralizada no grid do NEXT
     if (nextIdx >= 0 && nextIdx < (int)PIECES.size()) {
         const auto& pc = PIECES[nextIdx];
         if (!pc.rot.empty() && !pc.rot[0].empty()) {
             int minx = 999, maxx = -999, miny = 999, maxy = -999;
-            for (auto [px,py] : pc.rot[0]) { if (px < minx) minx = px; if (px > maxx) maxx = px; if (py < miny) miny = py; if (py > maxy) maxy = py; }
+            for (auto [px,py] : pc.rot[0]) { 
+                if (px < minx) minx = px; 
+                if (px > maxx) maxx = px; 
+                if (py < miny) miny = py; 
+                if (py > maxy) maxy = py; 
+            }
             int blocksW = (maxx - minx + 1);
             int blocksH = (maxy - miny + 1);
             int startX = gridX + (gridW - blocksW * cellMini) / 2 - minx * cellMini;
@@ -215,7 +244,106 @@ void HUDLayer::render(SDL_Renderer* renderer, const GameState& state, const Layo
         }
     }
 }
-int HUDLayer::getZOrder() const { return 3; }
+
+// PieceStatsLayer
+void PieceStatsLayer::render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) {
+    const std::vector<int>* pieceStats = nullptr;
+    if (!db_getPieceStats(state, pieceStats) || pieceStats == nullptr || PIECES.empty()) return;
+    
+    // Calcular tamanho da caixa de estatísticas
+    int cellSize = layout.cellBoard + 4;
+    int miniCellSize = std::max(2, layout.cellBoard / 3);
+    int rowHeight = cellSize + 2;
+    int numPieces = (int)PIECES.size();
+    int statsLabelH = 10 * layout.scale;
+    int statsPad = 10;
+    
+    // Usar valores pré-calculados do layout
+    std::string statsTitle = "PIECES";
+    int titleW = textWidthPx(statsTitle, layout.scale);
+    int numberScale = std::max(1, layout.scale / 2);
+    int innerPad = 16;
+    
+    // Usar largura e margem do layout (calculados em LayoutHelpers)
+    int statsBoxW = layout.statsBoxW;
+    int statsBoxX = layout.BX + layout.BW + layout.statsMargin;
+    int statsBoxY = layout.GY;
+    int statsBoxH = layout.GH;
+    
+    // Desenhar caixa ao redor das estatísticas
+    drawRoundedFilled(renderer, statsBoxX, statsBoxY, statsBoxW, statsBoxH, 10,
+                      themeManager.getTheme().next_fill_r, 
+                      themeManager.getTheme().next_fill_g, 
+                      themeManager.getTheme().next_fill_b, 255);
+    drawRoundedOutline(renderer, statsBoxX, statsBoxY, statsBoxW, statsBoxH, 10, 2,
+                       themeManager.getTheme().next_outline_r, 
+                       themeManager.getTheme().next_outline_g, 
+                       themeManager.getTheme().next_outline_b, 
+                       themeManager.getTheme().next_outline_a);
+    
+    // Título "PIECES"
+    int titleX = statsBoxX + (statsBoxW - titleW) / 2;
+    int titleY = statsBoxY + statsPad / 2;
+    drawPixelText(renderer, titleX, titleY, statsTitle, layout.scale,
+                 themeManager.getTheme().stats_label_r,
+                 themeManager.getTheme().stats_label_g,
+                 themeManager.getTheme().stats_label_b);
+    
+    // Renderizar estatísticas de cada peça
+    int statY = statsBoxY + statsLabelH + statsPad / 2;
+    int statX = statsBoxX + innerPad;
+    
+    for (size_t i = 0; i < PIECES.size(); ++i) {
+        int count = 0;
+        if (i < pieceStats->size()) {
+            count = (*pieceStats)[i];
+        }
+        
+        const auto& pc = PIECES[i];
+        
+        // Desenhar miniatura da peça
+        if (!pc.rot.empty() && !pc.rot[0].empty()) {
+            int minx = 999, maxx = -999, miny = 999, maxy = -999;
+            for (auto [px,py] : pc.rot[0]) {
+                if (px < minx) minx = px;
+                if (px > maxx) maxx = px;
+                if (py < miny) miny = py;
+                if (py > maxy) maxy = py;
+            }
+            int blocksW = (maxx - minx + 1);
+            int blocksH = (maxy - miny + 1);
+            
+            int startX = statX + (cellSize - blocksW * miniCellSize) / 2 - minx * miniCellSize;
+            int startY = statY + (cellSize - blocksH * miniCellSize) / 2 - miny * miniCellSize;
+            
+            for (auto [px,py] : pc.rot[0]) {
+                SDL_Rect rr{startX + px * miniCellSize, startY + py * miniCellSize, 
+                           miniCellSize - 1, miniCellSize - 1};
+                SDL_SetRenderDrawColor(renderer, pc.r, pc.g, pc.b, 255);
+                SDL_RenderFillRect(renderer, &rr);
+            }
+        }
+        
+        // Contagem alinhada à direita com tamanho reduzido
+        std::string countStr = std::to_string(count);
+        int countW = textWidthPx(countStr, numberScale);
+        int countX = statsBoxX + statsBoxW - countW - innerPad;
+        drawPixelText(renderer, countX, statY + cellSize / 2 - 2, countStr, numberScale,
+                     themeManager.getTheme().stats_count_r,
+                     themeManager.getTheme().stats_count_g,
+                     themeManager.getTheme().stats_count_b);
+        
+        statY += rowHeight;
+    }
+}
+int PieceStatsLayer::getZOrder() const { return 2; }
+std::string PieceStatsLayer::getName() const { return "PieceStats"; }
+
+// BoardLayer
+int BoardLayer::getZOrder() const { return 3; } // Mudado de 2 para 3
+
+// HUDLayer
+int HUDLayer::getZOrder() const { return 4; } // Mudado de 3 para 4
 std::string HUDLayer::getName() const { return "HUD"; }
 
 // OverlayLayer
@@ -242,7 +370,7 @@ void OverlayLayer::render(SDL_Renderer* renderer, const GameState& state, const 
         }
     }
 }
-int OverlayLayer::getZOrder() const { return 4; }
+int OverlayLayer::getZOrder() const { return 5; } // Mudado de 4 para 5
 std::string OverlayLayer::getName() const { return "Overlay"; }
 
 // PostEffectsLayer
@@ -288,7 +416,7 @@ void PostEffectsLayer::render(SDL_Renderer* renderer, const GameState&, const La
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
     }
 }
-int PostEffectsLayer::getZOrder() const { return 5; }
+int PostEffectsLayer::getZOrder() const { return 6; } // Mudado de 5 para 6
 std::string PostEffectsLayer::getName() const { return "PostEffects"; }
 
 

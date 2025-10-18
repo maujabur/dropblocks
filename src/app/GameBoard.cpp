@@ -22,7 +22,7 @@ bool GameBoard::isGameOver(const Active& piece) const { return collides(piece, g
 void GameBoard::reset() { for (auto& row : grid_) for (auto& cell : row) cell.occ = false; }
 
 int GameBoard::getTensionLevel() const {
-    int filledRows = 0; for (int y = ROWS - 5; y < ROWS; y++) { bool hasBlocks = false; for (int x = 0; x < COLS; x++) if (grid_[y][x].occ) { hasBlocks = true; break; } if (hasBlocks) filledRows++; }
+    int filledRows = 0; for (int y = ROWS - 6; y < ROWS; y++) { bool hasBlocks = false; for (int x = 0; x < COLS; x++) if (grid_[y][x].occ) { hasBlocks = true; break; } if (hasBlocks) filledRows++; }
     return filledRows;
 }
 

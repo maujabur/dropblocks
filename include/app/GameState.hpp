@@ -22,6 +22,7 @@ private:
     bool paused_ = false;
     bool gameover_ = false;
     Uint32 lastTick_ = 0;
+    std::vector<int> pieceStats_; // contador de cada tipo de peça sorteada
     
     std::unique_ptr<IAudioSystem> audio_;
     std::unique_ptr<IThemeManager> theme_;
@@ -86,4 +87,9 @@ public:
     void setLevel(int level);
     void setTickMs(int tickMs);
     int getNextIdx() const;
+    
+    // Piece statistics
+    const std::vector<int>& getPieceStats() const;
+    void incrementPieceStat(int pieceIdx);
+    void resetPieceStats();
 };

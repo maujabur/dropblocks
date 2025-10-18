@@ -25,6 +25,13 @@ public:
     std::string getName() const override;
 };
 
+class PieceStatsLayer : public RenderLayer {
+public:
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override;
+    int getZOrder() const override;
+    std::string getName() const override;
+};
+
 class BoardLayer : public RenderLayer {
 public:
     void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override;

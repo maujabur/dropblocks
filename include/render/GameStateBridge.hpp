@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL2/SDL.h>
+#include <vector>
 
 class GameState;
 class RenderManager;
@@ -29,6 +30,7 @@ bool db_isGameOver(const GameState& state);
 int db_getScore(const GameState& state);
 int db_getLines(const GameState& state);
 int db_getLevel(const GameState& state);
+bool db_getPieceStats(const GameState& state, const std::vector<int>*& stats);
 
 // Loop/control bridge
 bool db_isRunning(const GameState& state);

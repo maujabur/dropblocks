@@ -202,12 +202,18 @@ bool initializeGame(GameState& state, AudioSystem& audio, ConfigManager& configM
 void initializeRandomizer(GameState& state) {
     pieceManager.initializeRandomizer();
     
+    // Reset statistics before starting new game
+    state.resetPieceStats();
+    
     // Use the new PieceManager system
     state.getPieces().reset();
     
     // Get the first piece and set it as active
     int firstPiece = state.getPieces().getNextPiece();
     newActive(state.getActivePiece(), firstPiece);
+    
+    // Incrementar estatísticas para a primeira peça
+    state.incrementPieceStat(firstPiece);
     
     // Set the next piece
     state.getPieces().setNextPiece(state.getPieces().getNextPiece());

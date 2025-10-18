@@ -13,6 +13,9 @@ void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer*
     LayoutCache layoutCache; // main TU defines calculate/dirty
     while (db_isRunning(state) && running_) {
         if (!ren) { DebugLogger::error("Renderer is null; aborting main loop"); break; }
+        // temporary: disable mouse cursor
+        SDL_ShowCursor(SDL_DISABLE);
+        
         // Force recalc every frame; the function in main TU handles dirty flag and geometry
         db_layoutCalculate(layoutCache);
         db_update(state, ren);

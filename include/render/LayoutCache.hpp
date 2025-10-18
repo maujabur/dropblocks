@@ -7,5 +7,6 @@ struct LayoutCache {
     int cellBoard, GW, GH;
     int BX, BY, BW, BH, GX, GY;
     int panelX, panelW, panelY, panelH;
+    int statsBoxW, statsMargin; // largura da caixa de estatísticas
 };
 
