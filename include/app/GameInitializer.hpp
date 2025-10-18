@@ -7,6 +7,33 @@ class InputManager;
 class ConfigManager;
 class GameState;
 
+/**
+ * @brief Utility functions for game initialization
+ * 
+ * Standalone functions that can be used independently or via GameInitializer class
+ */
+namespace GameInit {
+    /**
+     * @brief Initialize SDL subsystems (video, audio, input, timer)
+     */
+    bool initializeSDL();
+    
+    /**
+     * @brief Initialize window and renderer
+     */
+    bool initializeWindow(SDL_Window*& win, SDL_Renderer*& ren);
+    
+    /**
+     * @brief Initialize game configuration and apply to all systems
+     */
+    bool initializeGame(GameState& state, AudioSystem& audio, ConfigManager& configManager, InputManager& inputManager);
+    
+    /**
+     * @brief Initialize randomizer and set first piece
+     */
+    void initializeRandomizer(GameState& state);
+}
+
 class GameInitializer {
 private:
     bool sdlInitialized_ = false;

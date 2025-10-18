@@ -3,8 +3,13 @@
 #include <random>
 #include "Interfaces.hpp"
 
-// Forward declarations
-enum class RandType;
+/**
+ * @brief Piece randomization algorithm types
+ */
+enum class RandType { 
+    SIMPLE,  /**< Simple random selection */
+    BAG      /**< Bag-based randomizer (7-bag system) */
+};
 
 class PieceManager : public IPieceManager {
 public:
