@@ -70,9 +70,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "6.25"
-#define DROPBLOCKS_BUILD_INFO "Phase 14.1: Cleanup piece loading wrappers"
-#define DROPBLOCKS_FEATURES "Removed unnecessary piece loading wrappers; direct pieceManager calls"
+#define DROPBLOCKS_VERSION "7.0"
+#define DROPBLOCKS_BUILD_INFO "Major Refactoring Complete"
+#define DROPBLOCKS_FEATURES "Modular architecture: 661→328 lines (-50%); ConfigApplicator, GameInit, cleaned globals"
 
 // ===========================
 //   FORWARD DECLARATIONS
@@ -97,85 +97,62 @@ struct GameConfig;
 
 
 // ===========================
-//   PARÂMETROS & THEME
+//   GLOBAL CONFIGURATION
 // ===========================
+// These globals are managed by ConfigManager and applied via ConfigApplicator.
+// They remain global for performance (avoiding indirection) and backward compatibility.
+// Future: Consider moving to a GlobalConfig singleton if more encapsulation is needed.
 
-int   ROUNDED_PANELS = 1;           // 1 = arredondado; 0 = retângulo (synced from VisualConfig.layout)
-int   HUD_FIXED_SCALE   = 6;        // escala fixa do HUD
-std::string TITLE_TEXT  = "---H A C K T R I S";// texto vertical (A–Z e espaço)
-int   GAP1_SCALE        = 10;       // banner ↔ tabuleiro (x scale)
-int   GAP2_SCALE        = 10;       // tabuleiro ↔ painel  (x scale)
+// Layout parameters (synced from VisualConfig.layout via ConfigApplicator)
+int   ROUNDED_PANELS = 1;           // 1 = rounded; 0 = rectangle
+int   HUD_FIXED_SCALE   = 6;        // Fixed HUD scale
+std::string TITLE_TEXT  = "---H A C K T R I S";  // Vertical text (A-Z and space)
+int   GAP1_SCALE        = 10;       // banner ↔ board (x scale)
+int   GAP2_SCALE        = 10;       // board ↔ panel (x scale)
 
-// Caminho opcional indicado no cfg para o arquivo de peças
-std::string PIECES_FILE_PATH = "";
+// Pieces configuration (managed by PieceManager)
+std::string PIECES_FILE_PATH = "";  // Optional path to pieces file from config
 
-// Config do set de peças
-static int PREVIEW_GRID = 6;               // NxN no NEXT (padrão 6)
-
-// Visual effects bridge backing store (read by db_getVisualEffects)
+// Visual effects bridge (provides read-only access to visual config)
 VisualEffectsView g_visualView{};
 
-// RandType moved to include/pieces/PieceManager.hpp
-static RandType RAND_TYPE = RandType::SIMPLE;
-static int RAND_BAG_SIZE  = 0;             // 0 => tamanho do set
-
 // ===========================
-//   MECÂNICA / ESTRUTURAS
+//   GAME MECHANICS CONSTANTS
 // ===========================
+// These constants define core game behavior and are synced from GameConfig.
 
-/** @brief Number of columns in the game board */
+/** @brief Number of columns in the game board (constant) */
 const int COLS = 10;
-/** @brief Number of rows in the game board */
+/** @brief Number of rows in the game board (constant) */
 const int ROWS = 20;
-/** @brief Border size around the game board */
+/** @brief Border size around the game board (pixels) */
 int BORDER = 10;
-/** @brief Initial game tick interval in milliseconds */
-static int TICK_MS_START = 400;
-/** @brief Minimum game tick interval in milliseconds */
-static int TICK_MS_MIN   = 80;
-/** @brief Speed acceleration per level (ms reduction) */
+/** @brief Speed acceleration per level (ms reduction per level) */
 int SPEED_ACCELERATION = 50;
 /** @brief Aspect ratio correction factor for LED screen distortion */
 float ASPECT_CORRECTION_FACTOR = 0.75f;
 /** @brief Lines required to advance to next level */
-int LEVEL_STEP    = 10;
+int LEVEL_STEP = 10;
 
 // Forward declarations moved to include/config/ConfigProcessors.hpp
 
 
-// Global manager instances (temporary during migration)
-GameConfig gameConfig;
-ThemeManager themeManager;
+// ===========================
+//   GLOBAL MANAGER INSTANCES
+// ===========================
+// These are the main subsystem managers. They coordinate configuration,
+// theme, and piece management across the application.
 
-// Forward declarations for classes
-class PieceManager;
-
-
-std::vector<Piece> PIECES;
+GameConfig gameConfig;              // Game timing and mechanics configuration
+ThemeManager themeManager;          // Visual theme and color management
+std::vector<Piece> PIECES;          // Active piece set (loaded from .pieces file)
 
 
 // ===========================
 //   CONFIGURAÇÃO E CARREGAMENTO
 // ===========================
 
-// Funções auxiliares para parsing de configuração
-static std::string parseConfigLine(const std::string& line) {
-    // Comentários: ; sempre; # só se vier antes do '='
-    size_t eq_probe = line.find('=');
-    size_t semicol = line.find(';');
-    size_t hash = line.find('#');
-    size_t cut = std::string::npos;
-    
-    if (semicol != std::string::npos) cut = semicol;
-    if (hash != std::string::npos && (eq_probe == std::string::npos || hash < eq_probe))
-        cut = (cut == std::string::npos ? hash : std::min(cut, hash));
-    if (cut != std::string::npos) {
-        std::string result = line;
-        result.resize(cut);
-        return result;
-    }
-    return line;
-}
+// parseConfigLine moved to src/config/ConfigProcessors.cpp
 
 // processBasicConfigs moved to src/config/ConfigProcessors.cpp
 
@@ -205,16 +182,6 @@ bool db_loadPiecesPath(const std::string& p){
     return ok;
 }
 
-// applyThemePieceColors moved to src/config/ConfigApplicator.cpp
-
-// ===========================
-//   FUNÇÕES DE APLICAÇÃO DE CONFIGURAÇÃO
-// ===========================
-// All apply* functions moved to src/config/ConfigApplicator.cpp
-
-// applyConfigToAudio moved to src/config/ConfigApplicator.cpp
-// applyConfigToTheme moved to src/config/ConfigApplicator.cpp
-// processAudioConfigs moved to src/config/ConfigProcessors.cpp
 
 // Global piece manager instance
 PieceManager pieceManager;
@@ -259,24 +226,7 @@ void db_layoutCalculate(LayoutCache& layout);
 extern VisualEffectsView g_visualView; // already defined above
 const VisualEffectsView& db_getVisualEffects() { return g_visualView; }
 
-// applyConfigToPieces moved to src/config/ConfigApplicator.cpp
 
-// initializeRandomizer moved to src/app/GameInitializer.cpp (GameInit namespace)
-
-// moved to src/render/LayoutHelpers.cpp
-
-// Função comum para eliminar duplicação
-// DEPRECATED functions removed (processPieceFall, handleInput, checkTensionSound, updateGame)
-// All functionality moved to GameState methods
-
-// initializeSDL moved to src/app/GameInitializer.cpp (GameInit namespace)
-
-// applyConfigToJoystick moved to src/config/ConfigApplicator.cpp
-
-// initializeGame moved to src/app/GameInitializer.cpp (GameInit namespace)
-// initializeWindow moved to src/app/GameInitializer.cpp (GameInit namespace)
-
-// Declaração forward para initializeRandomizer removed (duplicate)
 
 // ===========================
 //   MAIN E CONTROLES
@@ -292,42 +242,27 @@ const VisualEffectsView& db_getVisualEffects() { return g_visualView; }
  * @return Exit status (0 for success)
  */
 int main(int, char**) {
-    // Instanciar classes de gerenciamento
-    GameInitializer initializer;
-    GameLoop gameLoop;
-    GameCleanup cleanup;
-
-    // Objetos do jogo
+    // Display version info
+    DebugLogger::info("DropBlocks v" + std::string(DROPBLOCKS_VERSION) + " - " + DROPBLOCKS_BUILD_INFO);
+    DebugLogger::info("Features: " + std::string(DROPBLOCKS_FEATURES));
+    
+    // Create game objects
     AudioSystem audio;
     InputManager inputManager;
     ConfigManager configManager;
     GameState state;
     SDL_Window* win = nullptr;
     SDL_Renderer* ren = nullptr;
-
-    // Inicialização completa usando GameInitializer
-    printf("🚀 DropBlocks v%s - %s\n", DROPBLOCKS_VERSION, DROPBLOCKS_BUILD_INFO);
-    printf("   Features: %s\n\n", DROPBLOCKS_FEATURES);
-    printf("🔧 Testing Complete GameInitializer...\n");
+    
+    // Initialize all systems
+    GameInitializer initializer;
     if (!initializer.initializeComplete(audio, inputManager, configManager, state, win, ren)) {
-        printf("❌ GameInitializer complete test failed!\n");
+        DebugLogger::error("Initialization failed");
         return 1;
     }
-    printf("✅ GameInitializer complete test passed!\n");
-
-    // Verificar status de inicialização
-    printf("\n🔍 INITIALIZATION STATUS:\n");
-    printf("%s SDL2: %s\n", initializer.isSDLInitialized() ? "✅" : "❌", initializer.isSDLInitialized() ? "OK" : "FAILED");
-    printf("%s Audio: %s\n", initializer.isAudioInitialized() ? "✅" : "❌", initializer.isAudioInitialized() ? "OK" : "FAILED");
-    printf("%s Input: %s\n", initializer.isInputInitialized() ? "✅" : "❌", initializer.isInputInitialized() ? "OK" : "FAILED");
-    printf("%s Config: %s\n", initializer.isConfigInitialized() ? "✅" : "❌", initializer.isConfigInitialized() ? "OK" : "FAILED");
-    printf("%s Fullscreen Window: %s\n", initializer.isWindowInitialized() ? "✅" : "❌", initializer.isWindowInitialized() ? "OK" : "FAILED");
-    printf("%s GameState: %s\n", initializer.isGameStateInitialized() ? "✅" : "❌", initializer.isGameStateInitialized() ? "OK" : "FAILED");
-
-    // Configurar render manager
-    RenderManager renderManager(ren);
     
-    // Adicionar camadas de renderização
+    // Setup rendering pipeline
+    RenderManager renderManager(ren);
     renderManager.addLayer(std::make_unique<BackgroundLayer>());
     renderManager.addLayer(std::make_unique<BannerLayer>(&audio));
     renderManager.addLayer(std::make_unique<BoardLayer>());
@@ -335,16 +270,18 @@ int main(int, char**) {
     renderManager.addLayer(std::make_unique<OverlayLayer>());
     renderManager.addLayer(std::make_unique<PostEffectsLayer>(&audio));
     
-    // Inicializar randomizador
+    // Initialize game randomizer
     GameInit::initializeRandomizer(state);
-
-    printf("\n🎉 Initialization completed successfully!\n");
-
-    // Loop principal usando GameLoop
+    
+    DebugLogger::info("Initialization completed successfully");
+    
+    // Run game loop
+    GameLoop gameLoop;
     gameLoop.run(state, renderManager, ren);
-
-    // Limpeza usando GameCleanup
+    
+    // Cleanup
+    GameCleanup cleanup;
     cleanup.cleanupAll(audio, inputManager, renderManager, win, ren);
-
+    
     return 0;
 }
