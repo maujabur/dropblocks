@@ -36,7 +36,7 @@ bool db_getPieceStats(const GameState& state, const std::vector<int>*& stats);
 bool db_isRunning(const GameState& state);
 void db_update(GameState& state, SDL_Renderer* renderer);
 void db_render(GameState& state, RenderManager& renderManager, const LayoutCache& layout);
-void db_layoutCalculate(LayoutCache& layout);
+void db_layoutCalculate(LayoutCache& layout, SDL_Renderer* renderer);
 // Visual effects bridge (read-only snapshot)
 const VisualEffectsView& db_getVisualEffects();
 

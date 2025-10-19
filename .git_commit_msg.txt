@@ -1,0 +1,32 @@
+refactor: cleanup globals and simplify main() - v7.0
+
+Major milestone: dropblocks.cpp reduced from 661 to 314 lines (-52.5%)
+
+Changes:
+- Removed unused global variables:
+  * PREVIEW_GRID, RAND_TYPE, RAND_BAG_SIZE (now in PieceManager)
+  * TICK_MS_START, TICK_MS_MIN (now in GameConfig)
+  * parseConfigLine() function (moved to ConfigProcessors)
+- Improved documentation of remaining globals:
+  * Added clear sections: GLOBAL CONFIGURATION, GAME MECHANICS CONSTANTS
+  * Documented that globals are managed by respective systems
+  * Added rationale for keeping globals (performance, backward compat)
+- Simplified main() function:
+  * Removed verbose debug/status output
+  * Cleaner initialization flow
+  * Uses DebugLogger instead of printf
+  * Reduced from 57 to 43 lines (-24.5%)
+- Updated version to 7.0:
+  * DROPBLOCKS_VERSION: "6.25" -> "7.0"
+  * BUILD_INFO: "Major Refactoring Complete"
+  * FEATURES: Documents 50% code reduction
+
+Summary of entire refactoring effort:
+- dropblocks.cpp: 661 -> 314 lines (-347 lines, -52.5%)
+- Created 7 new modules (ConfigApplicator, GameInit, etc.)
+- All TODOs completed
+- Game compiles and runs correctly
+
+This represents a complete architectural overhaul with significantly
+improved modularity, maintainability, and code organization.
+

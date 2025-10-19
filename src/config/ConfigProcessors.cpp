@@ -15,7 +15,6 @@ extern int GAP2_SCALE;
 extern std::string TITLE_TEXT;
 extern std::string PIECES_FILE_PATH;
 extern int SPEED_ACCELERATION;
-extern float ASPECT_CORRECTION_FACTOR;
 extern GameConfig gameConfig;
 extern ThemeManager themeManager;
 
@@ -332,7 +331,6 @@ bool processJoystickConfigs(const std::string& key, const std::string& val, int&
     }
     
     // Configurações de renderização
-    if (setf("ASPECT_CORRECTION_FACTOR", ASPECT_CORRECTION_FACTOR)) { processedLines++; return true; }
     if (key == "PREVIEW_GRID") {
         int v = std::atoi(val.c_str());
         if (v > 0 && v <= 10) {

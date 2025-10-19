@@ -25,6 +25,7 @@ public:
     bool shouldRestart() override { return isKeyPressed(SDL_SCANCODE_RETURN); }
     bool shouldQuit() override { return isKeyPressed(SDL_SCANCODE_ESCAPE); }
     bool shouldScreenshot() override { return isKeyPressed(SDL_SCANCODE_F12); }
+    bool shouldToggleDebug() { return isKeyPressed(SDL_SCANCODE_D); }
 
     void update() override {
         for (int i = 0; i < SDL_NUM_SCANCODES; i++) {

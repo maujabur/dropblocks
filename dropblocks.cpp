@@ -99,8 +99,6 @@ const int ROWS = 20;
 int BORDER = 10;
 /** @brief Speed acceleration per level (ms reduction per level) */
 int SPEED_ACCELERATION = 50;
-/** @brief Aspect ratio correction factor for LED screen distortion */
-float ASPECT_CORRECTION_FACTOR = 0.75f;
 /** @brief Lines required to advance to next level */
 int LEVEL_STEP = 10;
 
@@ -156,7 +154,7 @@ int main(int, char**) {
     // Setup rendering pipeline
     RenderManager renderManager(ren);
     renderManager.addLayer(std::make_unique<BackgroundLayer>());
-    renderManager.addLayer(std::make_unique<BannerLayer>(&audio));
+    renderManager.addLayer(std::make_unique<BannerLayer>());
     renderManager.addLayer(std::make_unique<PieceStatsLayer>());
     renderManager.addLayer(std::make_unique<BoardLayer>());
     renderManager.addLayer(std::make_unique<HUDLayer>());

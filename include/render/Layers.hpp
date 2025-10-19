@@ -16,10 +16,7 @@ public:
 };
 
 class BannerLayer : public RenderLayer {
-private:
-    AudioSystem* audio_ = nullptr;
 public:
-    explicit BannerLayer(AudioSystem* audio);
     void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override;
     int getZOrder() const override;
     std::string getName() const override;

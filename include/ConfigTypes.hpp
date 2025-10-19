@@ -107,6 +107,6 @@ struct PiecesConfig {
     std::vector<RGB> pieceColors;
 };
 
-struct GameConfig { int tickMsStart = 400; int tickMsMin = 80; int speedAcceleration = 50; int levelStep = 10; float aspectCorrectionFactor = 0.75f; };
+struct GameConfig { int tickMsStart = 400; int tickMsMin = 80; int speedAcceleration = 50; int levelStep = 10; };
 
 

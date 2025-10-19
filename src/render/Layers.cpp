@@ -41,13 +41,16 @@ int BackgroundLayer::getZOrder() const { return 0; }
 std::string BackgroundLayer::getName() const { return "Background"; }
 
 // BannerLayer
-BannerLayer::BannerLayer(AudioSystem* audio) : audio_(audio) {}
 void BannerLayer::render(SDL_Renderer* renderer, const GameState&, const LayoutCache& layout) {
+    // Draw banner background (rounded)
     drawRoundedFilled(renderer, layout.BX, layout.BY, layout.BW, layout.BH, 10,
                       themeManager.getTheme().banner_bg_r, themeManager.getTheme().banner_bg_g, themeManager.getTheme().banner_bg_b, 255);
+    
+    // Draw outline
     drawRoundedOutline(renderer, layout.BX, layout.BY, layout.BW, layout.BH, 10, 2,
                        themeManager.getTheme().banner_outline_r, themeManager.getTheme().banner_outline_g, themeManager.getTheme().banner_outline_b, themeManager.getTheme().banner_outline_a);
 
+    // Draw text (vertical)
     int bty = layout.BY + 10, cxText = layout.BX + (layout.BW - 5 * layout.scale) / 2;
     for (size_t i = 0; i < TITLE_TEXT.size(); ++i) {
         char ch = TITLE_TEXT[i];
@@ -57,31 +60,6 @@ void BannerLayer::render(SDL_Renderer* renderer, const GameState&, const LayoutC
         drawPixelText(renderer, cxText, bty, std::string(1, ch), layout.scale,
                       themeManager.getTheme().banner_text_r, themeManager.getTheme().banner_text_g, themeManager.getTheme().banner_text_b);
         bty += 9 * layout.scale;
-    }
-
-    const auto& vis = db_getVisualEffects();
-    if (vis.bannerSweep) {
-        SDL_Rect clip{layout.BX, layout.BY, layout.BW, layout.BH};
-        SDL_RenderSetClipRect(renderer, &clip);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-        int bandH = vis.sweepBandHS * layout.scale;
-        int total = layout.BH + bandH;
-        float tsec = SDL_GetTicks() / 1000.0f;
-        int sweepY = (int)std::fmod(tsec * vis.sweepSpeedPxps, (float)total) - bandH;
-        for (int i = 0; i < bandH; ++i) {
-            float normalizedPos = (float)i / (float)bandH;
-            float center = 0.5f;
-            float distance = (normalizedPos - center) * 2.0f;
-            float sigma = 0.3f + (1.0f - vis.sweepSoftness) * 0.4f;
-            float softness = std::exp(-(distance * distance) / (2.0f * sigma * sigma));
-            Uint8 a = (Uint8)std::round(vis.sweepAlphaMax * softness);
-            SDL_SetRenderDrawColor(renderer, 255, 255, 255, a);
-            SDL_Rect line{layout.BX, layout.BY + sweepY + i, layout.BW, 1};
-            SDL_RenderFillRect(renderer, &line);
-        }
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-        SDL_RenderSetClipRect(renderer, nullptr);
-        if (audio_) audio_->playSweepEffect();
     }
 }
 int BannerLayer::getZOrder() const { return 1; }
@@ -414,6 +392,9 @@ void PostEffectsLayer::render(SDL_Renderer* renderer, const GameState&, const La
             }
         }
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+        
+        // Play sweep sound effect
+        if (audio_) audio_->playSweepEffect();
     }
 }
 int PostEffectsLayer::getZOrder() const { return 6; } // Mudado de 5 para 6

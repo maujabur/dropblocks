@@ -10,13 +10,14 @@ extern int BORDER;
 extern int GAP1_SCALE;
 extern int GAP2_SCALE;
 extern int HUD_FIXED_SCALE;
-extern float ASPECT_CORRECTION_FACTOR;
 
-void db_layoutCalculate(LayoutCache& layout) {
-    SDL_DisplayMode dmNow;
-    SDL_GetCurrentDisplayMode(0, &dmNow);
-    layout.SWr = dmNow.w;
-    layout.SHr = dmNow.h;
+void db_layoutCalculate(LayoutCache& layout, SDL_Renderer* renderer) {
+    // Use SDL_GetRendererOutputSize to get the actual rendering resolution
+    // This is important when SDL_WINDOW_ALLOW_HIGHDPI is used
+    int w, h;
+    SDL_GetRendererOutputSize(renderer, &w, &h);
+    layout.SWr = w;
+    layout.SHr = h;
     
     if (layout.SWr * 9 >= layout.SHr * 16) {
         layout.CH = layout.SHr;
@@ -39,7 +40,6 @@ void db_layoutCalculate(LayoutCache& layout) {
     
     int cellW = layout.usableLeftW / COLS;
     int cellH = (layout.CH - 2 * BORDER) / ROWS;
-    cellH = (int)(cellH * ASPECT_CORRECTION_FACTOR);
     layout.cellBoard = std::min(std::max(8, cellW), cellH);
     
     layout.GW = layout.cellBoard * COLS;

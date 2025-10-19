@@ -94,7 +94,7 @@ public:
     GameConfigParser(GameConfig& config) : config_(config) {}
     bool parse(const std::string& key, const std::string& value) override;
     std::string getCategory() const override { return "game"; }
-    bool validate() const override { return (config_.tickMsStart > 0) && (config_.tickMsMin > 0) && (config_.speedAcceleration > 0) && (config_.levelStep > 0) && (config_.aspectCorrectionFactor > 0.0f && config_.aspectCorrectionFactor <= 2.0f); }
+    bool validate() const override { return (config_.tickMsStart > 0) && (config_.tickMsMin > 0) && (config_.speedAcceleration > 0) && (config_.levelStep > 0); }
 };
 
 // ---- VisualConfigParser impl ----
@@ -212,7 +212,6 @@ bool GameConfigParser::parse(const std::string& key, const std::string& value) {
     if (key == "TICK_MS_MIN") { config_.tickMsMin = parseInt(value); return true; }
     if (key == "SPEED_ACCELERATION") { config_.speedAcceleration = parseInt(value); return true; }
     if (key == "LEVEL_STEP") { config_.levelStep = parseInt(value); return true; }
-    if (key == "ASPECT_CORRECTION_FACTOR") { config_.aspectCorrectionFactor = parseFloat(value); return true; }
     return false;
 }
 

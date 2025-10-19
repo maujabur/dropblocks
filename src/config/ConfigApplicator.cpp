@@ -15,7 +15,6 @@ extern int GAP2_SCALE;
 extern std::string TITLE_TEXT;
 extern int SPEED_ACCELERATION;
 extern int LEVEL_STEP;
-extern float ASPECT_CORRECTION_FACTOR;
 extern GameConfig gameConfig;
 
 namespace ConfigApplicator {
@@ -155,7 +154,6 @@ void applyConfigToGame(GameState& state, const GameConfig& config) {
     gameConfig.tickMsMin = config.tickMsMin;
     SPEED_ACCELERATION = config.speedAcceleration;
     LEVEL_STEP = config.levelStep;
-    ASPECT_CORRECTION_FACTOR = config.aspectCorrectionFactor;
     
     // Apply configuration to the new modular systems
     state.getScore().setTickMs(config.tickMsStart);
