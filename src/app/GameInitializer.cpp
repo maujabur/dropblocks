@@ -170,6 +170,7 @@ bool initializeGame(GameState& state, AudioSystem& audio, ConfigManager& configM
     ConfigApplicator::applyConfigToTheme(configManager.getVisual(), themeManager, g_visualView);
     ConfigApplicator::applyConfigToGame(state, configManager.getGame());
     ConfigApplicator::applyConfigToPieces(configManager.getPieces(), themeManager);
+    ConfigApplicator::applyConfigToLayout(configManager.getLayout());
     
     // Apply joystick configuration to InputManager
     ConfigApplicator::applyConfigToJoystick(inputManager, configManager.getInput());

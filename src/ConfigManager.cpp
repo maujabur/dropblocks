@@ -97,6 +97,34 @@ public:
     bool validate() const override { return (config_.tickMsStart > 0) && (config_.tickMsMin > 0) && (config_.speedAcceleration > 0) && (config_.levelStep > 0); }
 };
 
+class LayoutConfigParser : public ConfigParser {
+private:
+    LayoutConfig& config_;
+    int parseInt(const std::string& value) const { return std::atoi(value.c_str()); }
+    bool parseHexColor(const std::string& value, RGB& color) const {
+        std::string hex = value; if (hex.size() && hex[0] == '#') hex = hex.substr(1);
+        if (hex.length() != 6) return false;
+        try {
+            color.r = (Uint8)std::stoi(hex.substr(0,2), nullptr, 16);
+            color.g = (Uint8)std::stoi(hex.substr(2,2), nullptr, 16);
+            color.b = (Uint8)std::stoi(hex.substr(4,2), nullptr, 16);
+            return true;
+        } catch (...) { return false; }
+    }
+    ScaleMode parseScaleMode(const std::string& value) const {
+        std::string v = value;
+        for (char& c : v) c = (char)std::toupper((unsigned char)c);
+        if (v == "STRETCH") return ScaleMode::STRETCH;
+        if (v == "NATIVE") return ScaleMode::NATIVE;
+        return ScaleMode::AUTO;
+    }
+public:
+    LayoutConfigParser(LayoutConfig& config) : config_(config) {}
+    bool parse(const std::string& key, const std::string& value) override;
+    std::string getCategory() const override { return "layout"; }
+    bool validate() const override { return (config_.virtualWidth > 0) && (config_.virtualHeight > 0); }
+};
+
 // ---- VisualConfigParser impl ----
 bool VisualConfigParser::parse(const std::string& key, const std::string& value) {
     if (key == "BACKGROUND") return parseHexColor(value, config_.colors.background);
@@ -215,6 +243,87 @@ bool GameConfigParser::parse(const std::string& key, const std::string& value) {
     return false;
 }
 
+// ---- LayoutConfigParser impl ----
+bool LayoutConfigParser::parse(const std::string& key, const std::string& value) {
+    // Global layout settings
+    if (key == "LAYOUT_VIRTUAL_WIDTH") { config_.virtualWidth = parseInt(value); return true; }
+    if (key == "LAYOUT_VIRTUAL_HEIGHT") { config_.virtualHeight = parseInt(value); return true; }
+    if (key == "LAYOUT_SCALE_MODE") { config_.scaleMode = parseScaleMode(value); return true; }
+    if (key == "LAYOUT_OFFSET_X") { config_.offsetX = parseInt(value); return true; }
+    if (key == "LAYOUT_OFFSET_Y") { config_.offsetY = parseInt(value); return true; }
+    if (key == "PANEL_BORDER_RADIUS") { config_.borderRadius = parseInt(value); return true; }
+    if (key == "PANEL_BORDER_THICKNESS") { config_.borderThickness = parseInt(value); return true; }
+    
+    // Banner element
+    if (key == "BANNER_X") { config_.banner.x = parseInt(value); return true; }
+    if (key == "BANNER_Y") { config_.banner.y = parseInt(value); return true; }
+    if (key == "BANNER_WIDTH") { config_.banner.width = parseInt(value); return true; }
+    if (key == "BANNER_HEIGHT") { config_.banner.height = parseInt(value); return true; }
+    if (key == "BANNER_BG_COLOR") { return parseHexColor(value, config_.banner.backgroundColor); }
+    if (key == "BANNER_OUTLINE_COLOR") { return parseHexColor(value, config_.banner.outlineColor); }
+    if (key == "BANNER_TEXT_COLOR") { return parseHexColor(value, config_.banner.textColor); }
+    if (key == "BANNER_BG_ALPHA") { config_.banner.backgroundAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "BANNER_OUTLINE_ALPHA") { config_.banner.outlineAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "BANNER_ENABLED") { config_.banner.enabled = (parseInt(value) != 0); return true; }
+    
+    // Stats element
+    if (key == "STATS_X") { config_.stats.x = parseInt(value); return true; }
+    if (key == "STATS_Y") { config_.stats.y = parseInt(value); return true; }
+    if (key == "STATS_WIDTH") { config_.stats.width = parseInt(value); return true; }
+    if (key == "STATS_HEIGHT") { config_.stats.height = parseInt(value); return true; }
+    if (key == "STATS_BG_COLOR") { return parseHexColor(value, config_.stats.backgroundColor); }
+    if (key == "STATS_OUTLINE_COLOR") { return parseHexColor(value, config_.stats.outlineColor); }
+    if (key == "STATS_TEXT_COLOR") { return parseHexColor(value, config_.stats.textColor); }
+    if (key == "STATS_BG_ALPHA") { config_.stats.backgroundAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "STATS_OUTLINE_ALPHA") { config_.stats.outlineAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "STATS_ENABLED") { config_.stats.enabled = (parseInt(value) != 0); return true; }
+    
+    // Board element
+    if (key == "BOARD_X") { config_.board.x = parseInt(value); return true; }
+    if (key == "BOARD_Y") { config_.board.y = parseInt(value); return true; }
+    if (key == "BOARD_WIDTH") { config_.board.width = parseInt(value); return true; }
+    if (key == "BOARD_HEIGHT") { config_.board.height = parseInt(value); return true; }
+    if (key == "BOARD_ENABLED") { config_.board.enabled = (parseInt(value) != 0); return true; }
+    
+    // HUD element
+    if (key == "HUD_X") { config_.hud.x = parseInt(value); return true; }
+    if (key == "HUD_Y") { config_.hud.y = parseInt(value); return true; }
+    if (key == "HUD_WIDTH") { config_.hud.width = parseInt(value); return true; }
+    if (key == "HUD_HEIGHT") { config_.hud.height = parseInt(value); return true; }
+    if (key == "HUD_BG_COLOR") { return parseHexColor(value, config_.hud.backgroundColor); }
+    if (key == "HUD_OUTLINE_COLOR") { return parseHexColor(value, config_.hud.outlineColor); }
+    if (key == "HUD_TEXT_COLOR") { return parseHexColor(value, config_.hud.textColor); }
+    if (key == "HUD_BG_ALPHA") { config_.hud.backgroundAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "HUD_OUTLINE_ALPHA") { config_.hud.outlineAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "HUD_ENABLED") { config_.hud.enabled = (parseInt(value) != 0); return true; }
+    
+    // Next element
+    if (key == "NEXT_X") { config_.next.x = parseInt(value); return true; }
+    if (key == "NEXT_Y") { config_.next.y = parseInt(value); return true; }
+    if (key == "NEXT_WIDTH") { config_.next.width = parseInt(value); return true; }
+    if (key == "NEXT_HEIGHT") { config_.next.height = parseInt(value); return true; }
+    if (key == "NEXT_BG_COLOR") { return parseHexColor(value, config_.next.backgroundColor); }
+    if (key == "NEXT_OUTLINE_COLOR") { return parseHexColor(value, config_.next.outlineColor); }
+    if (key == "NEXT_TEXT_COLOR") { return parseHexColor(value, config_.next.textColor); }
+    if (key == "NEXT_BG_ALPHA") { config_.next.backgroundAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "NEXT_OUTLINE_ALPHA") { config_.next.outlineAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "NEXT_ENABLED") { config_.next.enabled = (parseInt(value) != 0); return true; }
+    
+    // === SCORE ===
+    if (key == "SCORE_X") { config_.score.x = parseInt(value); return true; }
+    if (key == "SCORE_Y") { config_.score.y = parseInt(value); return true; }
+    if (key == "SCORE_WIDTH") { config_.score.width = parseInt(value); return true; }
+    if (key == "SCORE_HEIGHT") { config_.score.height = parseInt(value); return true; }
+    if (key == "SCORE_BG_COLOR") { return parseHexColor(value, config_.score.backgroundColor); }
+    if (key == "SCORE_OUTLINE_COLOR") { return parseHexColor(value, config_.score.outlineColor); }
+    if (key == "SCORE_TEXT_COLOR") { return parseHexColor(value, config_.score.textColor); }
+    if (key == "SCORE_BG_ALPHA") { config_.score.backgroundAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "SCORE_OUTLINE_ALPHA") { config_.score.outlineAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "SCORE_ENABLED") { config_.score.enabled = (parseInt(value) != 0); return true; }
+    
+    return false;
+}
+
 // ---- ConfigManager impl ----
 static void trim(std::string& s) {
     if (s.empty()) return;
@@ -234,7 +343,8 @@ bool ConfigManager::loadFromFile(const std::string& path) {
     InputConfigParser inputParser(input_);
     PiecesConfigParser piecesParser(pieces_);
     GameConfigParser gameParser(game_);
-    std::vector<ConfigParser*> parsers = {&visualParser, &audioParser, &inputParser, &piecesParser, &gameParser};
+    LayoutConfigParser layoutParser(layout_);
+    std::vector<ConfigParser*> parsers = {&visualParser, &audioParser, &inputParser, &piecesParser, &gameParser, &layoutParser};
 
     std::string line; while (std::getline(file, line)) {
         size_t commentPos = line.find('#'); if (commentPos != std::string::npos) {
@@ -284,7 +394,8 @@ bool ConfigManager::validate() const {
     InputConfigParser inputParser(const_cast<InputConfig&>(input_));
     PiecesConfigParser piecesParser(const_cast<PiecesConfig&>(pieces_));
     GameConfigParser gameParser(const_cast<GameConfig&>(game_));
-    return visualParser.validate() && audioParser.validate() && inputParser.validate() && piecesParser.validate() && gameParser.validate();
+    LayoutConfigParser layoutParser(const_cast<LayoutConfig&>(layout_));
+    return visualParser.validate() && audioParser.validate() && inputParser.validate() && piecesParser.validate() && gameParser.validate() && layoutParser.validate();
 }
 
 

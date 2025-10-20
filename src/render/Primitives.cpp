@@ -63,13 +63,14 @@ static bool glyph5x7(char c, int x, int y){
     static const char* Z_[7] = {"#####","    #","   # ","  #  "," #   ","#    ","#####"};
     static const char* dash[7] = {"     ","     ","     "," ### ","     ","     ","     "};
     static const char* colon[7] = {"     ","  #  ","     ","     ","     ","  #  ","     "};
+    static const char* dot[7] = {"     ","     ","     ","     ","     "," ##  "," ##  "};
     if(c>='0'&&c<='9') return NUM[c-'0'][y][x]=='#';
     c=(char)std::toupper((unsigned char)c);
 #define GL(CH,ARR) if(c==CH) return at(ARR);
     GL('A',A_) GL('B',B_) GL('C',C_) GL('D',D_) GL('E',E_) GL('F',F_) GL('G',G_)
     GL('H',H_) GL('I',I_) GL('J',J_) GL('K',K_) GL('L',L_) GL('M',M_) GL('N',N_)
     GL('O',O_) GL('P',P_) GL('Q',Q_) GL('R',R_) GL('S',S_) GL('T',T_) GL('U',U_)
-    GL('V',V_) GL('W',W_) GL('X',X_) GL('Y',Y_) GL('Z',Z_) GL('-',dash) GL(':',colon)
+    GL('V',V_) GL('W',W_) GL('X',X_) GL('Y',Y_) GL('Z',Z_) GL('-',dash) GL(':',colon) GL('.',dot)
 #undef GL
     return false;
 }
@@ -101,6 +102,44 @@ void drawPixelTextOutlined(SDL_Renderer* ren, int x, int y, const std::string& s
     drawPixelText(ren, x-d, y+d, s, scale, or_,og,ob);
     drawPixelText(ren, x+d, y+d, s, scale, or_,og,ob);
     drawPixelText(ren, x,   y,   s, scale, fr,fg,fb);
+}
+
+// New versions with separate scaleX/scaleY (for STRETCH mode)
+void drawPixelText(SDL_Renderer* ren, int x, int y, const std::string& s, float scaleX, float scaleY, Uint8 r, Uint8 g, Uint8 b){
+    SDL_Rect px; SDL_SetRenderDrawColor(ren, r,g,b,255);
+    int cx=x;
+    for(char c : s){
+        if(c=='\n'){ y += (int)(7*scaleY + scaleY*2); cx=x; continue; }
+        for(int yy=0; yy<7; ++yy) {
+            for(int xx=0; xx<5; ++xx) {
+                if(glyph5x7(c,xx,yy)){
+                    px = { cx + (int)(xx*scaleX), y + (int)(yy*scaleY), (int)scaleX, (int)scaleY };
+                    SDL_RenderFillRect(ren, &px);
+                }
+            }
+        }
+        cx += (int)(6*scaleX);
+    }
+}
+
+int textWidthPx(const std::string& s, float scaleX){
+    if(s.empty()) return 0; 
+    return (int)(s.size() * 6 * scaleX - scaleX);
+}
+
+void drawPixelTextOutlined(SDL_Renderer* ren, int x, int y, const std::string& s, float scaleX, float scaleY,
+                           Uint8 fr, Uint8 fg, Uint8 fb, Uint8 or_, Uint8 og, Uint8 ob){
+    const int dx = std::max(1, (int)(scaleX/2));
+    const int dy = std::max(1, (int)(scaleY/2));
+    drawPixelText(ren, x-dx, y,    s, scaleX, scaleY, or_,og,ob);
+    drawPixelText(ren, x+dx, y,    s, scaleX, scaleY, or_,og,ob);
+    drawPixelText(ren, x,    y-dy, s, scaleX, scaleY, or_,og,ob);
+    drawPixelText(ren, x,    y+dy, s, scaleX, scaleY, or_,og,ob);
+    drawPixelText(ren, x-dx, y-dy, s, scaleX, scaleY, or_,og,ob);
+    drawPixelText(ren, x+dx, y-dy, s, scaleX, scaleY, or_,og,ob);
+    drawPixelText(ren, x-dx, y+dy, s, scaleX, scaleY, or_,og,ob);
+    drawPixelText(ren, x+dx, y+dy, s, scaleX, scaleY, or_,og,ob);
+    drawPixelText(ren, x,    y,    s, scaleX, scaleY, fr,fg,fb);
 }
 
 void drawRoundedFilled(SDL_Renderer* r, int x, int y, int w, int h, int rad, Uint8 R, Uint8 G, Uint8 B, Uint8 A){
@@ -147,6 +186,56 @@ void drawRoundedFilled(SDL_Renderer* r, int x, int y, int w, int h, int rad, Uin
 void drawRoundedOutline(SDL_Renderer* r, int x, int y, int w, int h, int rad, int thick, Uint8 R, Uint8 G, Uint8 B, Uint8 A){
     for(int i=0;i<thick;i++){
         drawRoundedFilled(r, x+i, y+i, w-2*i, h-2*i, std::max(0,rad-i), R,G,B,A);
+    }
+}
+
+// New versions with elliptical corners (for STRETCH mode)
+void drawRoundedFilled(SDL_Renderer* r, int x, int y, int w, int h, int radX, int radY, Uint8 R, Uint8 G, Uint8 B, Uint8 A){
+    if(!ROUNDED_PANELS){ SDL_SetRenderDrawColor(r, R,G,B,A); SDL_Rect rr{ x,y,w,h }; SDL_RenderFillRect(r,&rr); return; }
+    radX = std::max(0, std::min(radX, w/2));
+    radY = std::max(0, std::min(radY, h/2));
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r, R,G,B,A);
+    
+    // ELLIPTICAL CORNERS: Use ellipse equation instead of circle
+    // For ellipse: (dx/radX)^2 + (dy/radY)^2 <= 1
+    
+    // 1. Draw the middle rectangle (full width, excluding corners)
+    SDL_Rect middleRect = {x, y + radY, w, h - 2*radY};
+    SDL_RenderFillRect(r, &middleRect);
+    
+    // 2. Draw top and bottom lines with elliptical corners (line-by-line)
+    for (int yy = 0; yy < radY; ++yy){
+        // TOP: Calculate horizontal extent for this row using ellipse equation
+        int dy_top = radY - yy;
+        // Solve for dx: dx = radX * sqrt(1 - (dy/radY)^2)
+        double ratio_y_top = (double)dy_top / (double)radY;
+        int dx_top = (int)(radX * std::sqrt(std::max(0.0, 1.0 - ratio_y_top*ratio_y_top)));
+        int left_x_top = x + radX - dx_top;
+        int line_width_top = w - 2*(radX - dx_top);
+        
+        if (line_width_top > 0) {
+            SDL_Rect topLine = {left_x_top, y + yy, line_width_top, 1};
+            SDL_RenderFillRect(r, &topLine);
+        }
+        
+        // BOTTOM: Mirror the calculation
+        int dy_bottom = yy;
+        double ratio_y_bottom = (double)dy_bottom / (double)radY;
+        int dx_bottom = (int)(radX * std::sqrt(std::max(0.0, 1.0 - ratio_y_bottom*ratio_y_bottom)));
+        int left_x_bottom = x + radX - dx_bottom;
+        int line_width_bottom = w - 2*(radX - dx_bottom);
+        
+        if (line_width_bottom > 0) {
+            SDL_Rect bottomLine = {left_x_bottom, y + h - radY + yy, line_width_bottom, 1};
+            SDL_RenderFillRect(r, &bottomLine);
+        }
+    }
+}
+
+void drawRoundedOutline(SDL_Renderer* r, int x, int y, int w, int h, int radX, int radY, int thick, Uint8 R, Uint8 G, Uint8 B, Uint8 A){
+    for(int i=0;i<thick;i++){
+        drawRoundedFilled(r, x+i, y+i, w-2*i, h-2*i, std::max(0,radX-i), std::max(0,radY-i), R,G,B,A);
     }
 }
 

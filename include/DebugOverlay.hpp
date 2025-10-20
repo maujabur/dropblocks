@@ -57,6 +57,13 @@ public:
      */
     void setCustomValue(const std::string& name, const std::string& value);
     
+    /**
+     * @brief Set layout debug information
+     */
+    void setLayoutInfo(int virtualW, int virtualH, int physicalW, int physicalH,
+                       float scaleX, float scaleY, int offsetX, int offsetY,
+                       const std::string& scaleMode);
+    
 private:
     bool enabled_ = false;
     float fps_ = 0.0f;
@@ -72,5 +79,16 @@ private:
     std::string customValue1_;
     std::string customName2_;
     std::string customValue2_;
+    
+    // Layout debug info
+    int virtualW_ = 0;
+    int virtualH_ = 0;
+    int physicalW_ = 0;
+    int physicalH_ = 0;
+    float scaleX_ = 1.0f;
+    float scaleY_ = 1.0f;
+    int offsetX_ = 0;
+    int offsetY_ = 0;
+    std::string scaleMode_ = "UNKNOWN";
 };
 

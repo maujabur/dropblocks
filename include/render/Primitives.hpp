@@ -5,13 +5,23 @@
 
 void drawRoundedFilled(SDL_Renderer* r, int x, int y, int w, int h, int rad,
                        Uint8 R, Uint8 G, Uint8 B, Uint8 A);
+void drawRoundedFilled(SDL_Renderer* r, int x, int y, int w, int h, int radX, int radY,
+                       Uint8 R, Uint8 G, Uint8 B, Uint8 A);
 void drawRoundedOutline(SDL_Renderer* r, int x, int y, int w, int h, int rad, int thickness,
                         Uint8 R, Uint8 G, Uint8 B, Uint8 A);
+void drawRoundedOutline(SDL_Renderer* r, int x, int y, int w, int h, int radX, int radY, int thickness,
+                        Uint8 R, Uint8 G, Uint8 B, Uint8 A);
 void drawPixelText(SDL_Renderer* r, int x, int y, const std::string& text, int scale,
+                   Uint8 R, Uint8 G, Uint8 B);
+void drawPixelText(SDL_Renderer* r, int x, int y, const std::string& text, float scaleX, float scaleY,
                    Uint8 R, Uint8 G, Uint8 B);
 void drawPixelTextOutlined(SDL_Renderer* r, int x, int y, const std::string& text, int scale,
                            Uint8 R, Uint8 G, Uint8 B,
                            Uint8 oR, Uint8 oG, Uint8 oB);
+void drawPixelTextOutlined(SDL_Renderer* r, int x, int y, const std::string& text, float scaleX, float scaleY,
+                           Uint8 R, Uint8 G, Uint8 B,
+                           Uint8 oR, Uint8 oG, Uint8 oB);
 int textWidthPx(const std::string& text, int scale);
+int textWidthPx(const std::string& text, float scaleX);
 
 

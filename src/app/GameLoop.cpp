@@ -24,6 +24,15 @@ void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer*
     int lastWidth = layoutCache.SWr;
     int lastHeight = layoutCache.SHr;
     
+    // Update debug overlay with layout info
+    std::string scaleModeStr = (layoutCache.scaleMode == ScaleMode::STRETCH) ? "STRETCH" : 
+                                (layoutCache.scaleMode == ScaleMode::NATIVE) ? "NATIVE" : "AUTO";
+    debugOverlay.setLayoutInfo(layoutCache.virtualWidth, layoutCache.virtualHeight,
+                               layoutCache.SWr, layoutCache.SHr,
+                               layoutCache.scaleX, layoutCache.scaleY,
+                               layoutCache.offsetX, layoutCache.offsetY,
+                               scaleModeStr);
+    
     // Pre-render static textures
     textureCache.update(ren, layoutCache, themeManager);
     
@@ -51,6 +60,16 @@ void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer*
         SDL_GetRendererOutputSize(ren, &currentWidth, &currentHeight);
         if (currentWidth != lastWidth || currentHeight != lastHeight) {
             db_layoutCalculate(layoutCache, ren);
+            
+            // Update debug overlay with new layout info
+            std::string scaleModeStr = (layoutCache.scaleMode == ScaleMode::STRETCH) ? "STRETCH" : 
+                                        (layoutCache.scaleMode == ScaleMode::NATIVE) ? "NATIVE" : "AUTO";
+            debugOverlay.setLayoutInfo(layoutCache.virtualWidth, layoutCache.virtualHeight,
+                                       layoutCache.SWr, layoutCache.SHr,
+                                       layoutCache.scaleX, layoutCache.scaleY,
+                                       layoutCache.offsetX, layoutCache.offsetY,
+                                       scaleModeStr);
+            
             textureCache.update(ren, layoutCache, themeManager);
             lastWidth = currentWidth;
             lastHeight = currentHeight;

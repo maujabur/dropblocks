@@ -31,65 +31,79 @@ void TextureCache::update(SDL_Renderer* renderer, const LayoutCache& layout, The
     // Clean up old textures
     cleanup();
     
+    // Use new layout system if configured, otherwise fall back to legacy
+    int bannerW = layout.bannerRect.w > 0 ? layout.bannerRect.w : layout.BW;
+    int bannerH = layout.bannerRect.w > 0 ? layout.bannerRect.h : layout.BH;
+    int statsW = layout.statsRect.w > 0 ? layout.statsRect.w : layout.statsBoxW;
+    int statsH = layout.statsRect.w > 0 ? layout.statsRect.h : layout.GH;
+    int hudW = layout.hudRect.w > 0 ? layout.hudRect.w : layout.panelW;
+    int hudH = layout.hudRect.w > 0 ? layout.hudRect.h : layout.panelH;
+    
     // 1. Create Banner Texture
-    bannerTexture_ = createTexture(renderer, layout.BW, layout.BH);
-    if (bannerTexture_) {
-        SDL_SetRenderTarget(renderer, bannerTexture_);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        
-        // Draw banner background
-        drawRoundedFilled(renderer, 0, 0, layout.BW, layout.BH, 10,
-                         theme.getTheme().banner_bg_r, 
-                         theme.getTheme().banner_bg_g, 
-                         theme.getTheme().banner_bg_b, 255);
-        drawRoundedOutline(renderer, 0, 0, layout.BW, layout.BH, 10, 2,
-                          theme.getTheme().banner_outline_r, 
-                          theme.getTheme().banner_outline_g, 
-                          theme.getTheme().banner_outline_b, 
-                          theme.getTheme().banner_outline_a);
-        
-        SDL_SetRenderTarget(renderer, nullptr);
+    if (layout.bannerConfig.enabled) {
+        bannerTexture_ = createTexture(renderer, bannerW, bannerH);
+        if (bannerTexture_) {
+            SDL_SetRenderTarget(renderer, bannerTexture_);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            
+            // Draw banner background
+            drawRoundedFilled(renderer, 0, 0, bannerW, bannerH, layout.borderRadius,
+                             theme.getTheme().banner_bg_r, 
+                             theme.getTheme().banner_bg_g, 
+                             theme.getTheme().banner_bg_b, 255);
+            drawRoundedOutline(renderer, 0, 0, bannerW, bannerH, layout.borderRadius, layout.borderThickness,
+                              theme.getTheme().banner_outline_r, 
+                              theme.getTheme().banner_outline_g, 
+                              theme.getTheme().banner_outline_b, 
+                              theme.getTheme().banner_outline_a);
+            
+            SDL_SetRenderTarget(renderer, nullptr);
+        }
     }
     
     // 2. Create Stats Box Texture
-    statsBoxTexture_ = createTexture(renderer, layout.statsBoxW, layout.GH);
-    if (statsBoxTexture_) {
-        SDL_SetRenderTarget(renderer, statsBoxTexture_);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        
-        drawRoundedFilled(renderer, 0, 0, layout.statsBoxW, layout.GH, 10,
-                         theme.getTheme().next_fill_r, 
-                         theme.getTheme().next_fill_g, 
-                         theme.getTheme().next_fill_b, 255);
-        drawRoundedOutline(renderer, 0, 0, layout.statsBoxW, layout.GH, 10, 2,
-                          theme.getTheme().next_outline_r, 
-                          theme.getTheme().next_outline_g, 
-                          theme.getTheme().next_outline_b, 
-                          theme.getTheme().next_outline_a);
-        
-        SDL_SetRenderTarget(renderer, nullptr);
+    if (layout.statsConfig.enabled) {
+        statsBoxTexture_ = createTexture(renderer, statsW, statsH);
+        if (statsBoxTexture_) {
+            SDL_SetRenderTarget(renderer, statsBoxTexture_);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            
+            drawRoundedFilled(renderer, 0, 0, statsW, statsH, layout.borderRadius,
+                             theme.getTheme().next_fill_r, 
+                             theme.getTheme().next_fill_g, 
+                             theme.getTheme().next_fill_b, 255);
+            drawRoundedOutline(renderer, 0, 0, statsW, statsH, layout.borderRadius, layout.borderThickness,
+                              theme.getTheme().next_outline_r, 
+                              theme.getTheme().next_outline_g, 
+                              theme.getTheme().next_outline_b, 
+                              theme.getTheme().next_outline_a);
+            
+            SDL_SetRenderTarget(renderer, nullptr);
+        }
     }
     
     // 3. Create HUD Panel Texture
-    hudPanelTexture_ = createTexture(renderer, layout.panelW, layout.panelH);
-    if (hudPanelTexture_) {
-        SDL_SetRenderTarget(renderer, hudPanelTexture_);
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-        SDL_RenderClear(renderer);
-        
-        drawRoundedFilled(renderer, 0, 0, layout.panelW, layout.panelH, 12,
-                         theme.getTheme().panel_fill_r, 
-                         theme.getTheme().panel_fill_g, 
-                         theme.getTheme().panel_fill_b, 255);
-        drawRoundedOutline(renderer, 0, 0, layout.panelW, layout.panelH, 12, 2,
-                          theme.getTheme().panel_outline_r, 
-                          theme.getTheme().panel_outline_g, 
-                          theme.getTheme().panel_outline_b, 
-                          theme.getTheme().panel_outline_a);
-        
-        SDL_SetRenderTarget(renderer, nullptr);
+    if (layout.hudConfig.enabled) {
+        hudPanelTexture_ = createTexture(renderer, hudW, hudH);
+        if (hudPanelTexture_) {
+            SDL_SetRenderTarget(renderer, hudPanelTexture_);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            SDL_RenderClear(renderer);
+            
+            drawRoundedFilled(renderer, 0, 0, hudW, hudH, layout.borderRadius,
+                             theme.getTheme().panel_fill_r, 
+                             theme.getTheme().panel_fill_g, 
+                             theme.getTheme().panel_fill_b, 255);
+            drawRoundedOutline(renderer, 0, 0, hudW, hudH, layout.borderRadius, layout.borderThickness,
+                              theme.getTheme().panel_outline_r, 
+                              theme.getTheme().panel_outline_g, 
+                              theme.getTheme().panel_outline_b, 
+                              theme.getTheme().panel_outline_a);
+            
+            SDL_SetRenderTarget(renderer, nullptr);
+        }
     }
     
     valid_ = true;

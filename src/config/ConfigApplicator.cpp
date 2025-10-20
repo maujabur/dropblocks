@@ -16,6 +16,7 @@ extern std::string TITLE_TEXT;
 extern int SPEED_ACCELERATION;
 extern int LEVEL_STEP;
 extern GameConfig gameConfig;
+extern LayoutConfig layoutConfig;
 
 namespace ConfigApplicator {
 
@@ -200,6 +201,11 @@ void applyConfigToJoystick(InputManager& inputManager, const InputConfig& config
             break; // Only configure the first joystick found
         }
     }
+}
+
+void applyConfigToLayout(const LayoutConfig& config) {
+    // Copy layout configuration to global layoutConfig
+    layoutConfig = config;
 }
 
 } // namespace ConfigApplicator

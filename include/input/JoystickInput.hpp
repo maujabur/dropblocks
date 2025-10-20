@@ -25,6 +25,7 @@ public:
     bool shouldRotateCW() override;
     bool shouldPause() override;
     bool shouldRestart() override;
+    bool shouldForceRestart() override;
     bool shouldQuit() override;
     bool shouldScreenshot() override;
     

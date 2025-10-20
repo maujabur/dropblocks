@@ -57,9 +57,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "8.0"
-#define DROPBLOCKS_BUILD_INFO "Major Refactoring Complete"
-#define DROPBLOCKS_FEATURES "Modular architecture: 661→209 lines (-68%); 8 new modules; bridge functions extracted"
+#define DROPBLOCKS_VERSION "8.1"
+#define DROPBLOCKS_BUILD_INFO "Virtual layout system with independent elements"	
+#define DROPBLOCKS_FEATURES "Layout system with independent elements and virtual coordinates"
 
 // Math constant (if not defined by system)
 #ifndef M_PI
@@ -76,7 +76,7 @@
 // Layout parameters (synced from VisualConfig.layout via ConfigApplicator)
 int   ROUNDED_PANELS = 1;           // 1 = rounded; 0 = rectangle
 int   HUD_FIXED_SCALE   = 6;        // Fixed HUD scale
-std::string TITLE_TEXT  = "---H A C K T R I S";  // Vertical text (A-Z and space)
+std::string TITLE_TEXT  = "__H A C K T R I S";  // Vertical text (A-Z and space)
 int   GAP1_SCALE        = 10;       // banner ↔ board (x scale)
 int   GAP2_SCALE        = 10;       // board ↔ panel (x scale)
 
@@ -111,6 +111,7 @@ int LEVEL_STEP = 10;
 GameConfig gameConfig;              // Game timing and mechanics configuration
 ThemeManager themeManager;          // Visual theme and color management
 std::vector<Piece> PIECES;          // Active piece set (loaded from .pieces file)
+LayoutConfig layoutConfig;          // Virtual layout configuration
 
 
 // Global piece manager instance
@@ -158,6 +159,8 @@ int main(int, char**) {
     renderManager.addLayer(std::make_unique<PieceStatsLayer>());
     renderManager.addLayer(std::make_unique<BoardLayer>());
     renderManager.addLayer(std::make_unique<HUDLayer>());
+    renderManager.addLayer(std::make_unique<NextLayer>());
+    renderManager.addLayer(std::make_unique<ScoreLayer>());
     renderManager.addLayer(std::make_unique<OverlayLayer>());
     renderManager.addLayer(std::make_unique<PostEffectsLayer>(&audio));
     

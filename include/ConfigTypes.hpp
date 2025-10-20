@@ -7,6 +7,46 @@
 
 struct RGB { unsigned char r = 0, g = 0, b = 0; };
 
+// Scale mode for virtual layout
+enum class ScaleMode {
+    AUTO,      // Uniform scale, maintain aspect ratio with black bars
+    STRETCH,   // Independent X/Y scale, fills screen (may distort)
+    NATIVE     // 1:1 scale, no transformation, render from (0,0)
+};
+
+// Layout configuration for a UI element (in virtual coordinates)
+struct ElementLayout {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+    RGB backgroundColor{0, 0, 0};
+    RGB outlineColor{0, 0, 0};
+    RGB textColor{255, 255, 255};
+    unsigned char backgroundAlpha = 255;
+    unsigned char outlineAlpha = 255;
+    bool enabled = true;
+};
+
+// Global layout configuration
+struct LayoutConfig {
+    int virtualWidth = 1920;
+    int virtualHeight = 1080;
+    ScaleMode scaleMode = ScaleMode::AUTO;
+    int borderRadius = 10;
+    int borderThickness = 2;
+    int offsetX = 0;  // Used only in NATIVE mode
+    int offsetY = 0;  // Used only in NATIVE mode
+    
+    // UI elements (in virtual coordinates)
+    ElementLayout banner;
+    ElementLayout stats;
+    ElementLayout board;  // Container for the game board
+    ElementLayout hud;
+    ElementLayout next;
+    ElementLayout score;
+};
+
 struct VisualConfig {
     struct Colors {
         RGB background{8,8,12};

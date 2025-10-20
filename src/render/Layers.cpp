@@ -32,34 +32,111 @@ extern std::string TITLE_TEXT;
 
 class GameState;
 
+// ============================================================================
+// HELPER FUNCTIONS: Scale offsets/dimensions consistently
+// ============================================================================
+// 
+// IMPORTANT: In STRETCH mode, scaleX and scaleY can differ, causing distortion.
+// All hardcoded offsets, padding, and spacing MUST be scaled to maintain
+// correct proportions across different virtual resolutions.
+//
+// Usage guide:
+//   scaleOffsetX/Y:      For panel padding, margins, initial positions
+//   scaleTextSpacing:    For spacing between text lines (proportional to text size)
+//   scaleCellSpacing:    For cell gaps (minimum 1px)
+//
+// Examples:
+//   int x = baseX + scaleOffsetX(14, layout);      // Panel padding
+//   int y = baseY + scaleOffsetY(10, layout);      // Panel margin
+//   y += scaleTextSpacing(12, layout);             // Space after text line
+//   int gap = scaleCellSpacing(1, layout.scaleX);  // Cell spacing
+//
+namespace {
+    // Scale a virtual X offset to physical coordinates (for panel spacing)
+    inline int scaleOffsetX(int virtualOffset, const LayoutCache& layout) {
+        return (int)(virtualOffset * layout.scaleX);
+    }
+    
+    // Scale a virtual Y offset to physical coordinates (for panel spacing)
+    inline int scaleOffsetY(int virtualOffset, const LayoutCache& layout) {
+        return (int)(virtualOffset * layout.scaleY);
+    }
+    
+    // Scale text spacing (proportional to text size, not screen size)
+    inline int scaleTextSpacing(int virtualSpacing, const LayoutCache& layout) {
+        return (int)(virtualSpacing * layout.scaleTextY);
+    }
+    
+    // Scale a cell spacing value (minimum 1 pixel)
+    inline int scaleCellSpacing(int virtualSpacing, float scale) {
+        return std::max(1, (int)(virtualSpacing * scale));
+    }
+}
+
 // BackgroundLayer
-void BackgroundLayer::render(SDL_Renderer* renderer, const GameState&, const LayoutCache&) {
-    SDL_SetRenderDrawColor(renderer, themeManager.getTheme().bg_r, themeManager.getTheme().bg_g, themeManager.getTheme().bg_b, 255);
+void BackgroundLayer::render(SDL_Renderer* renderer, const GameState&, const LayoutCache& layout) {
+    // ALWAYS render black background first (full screen)
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
+    
+    // Then render configured BG color ONLY in the virtual area (transformed to physical)
+    // This applies to ALL modes (AUTO, STRETCH, NATIVE)
+    int virtualAreaX = layout.offsetX;
+    int virtualAreaY = layout.offsetY;
+    int virtualAreaW = (int)(layout.virtualWidth * layout.scaleX);
+    int virtualAreaH = (int)(layout.virtualHeight * layout.scaleY);
+    
+    SDL_Rect virtualArea = {virtualAreaX, virtualAreaY, virtualAreaW, virtualAreaH};
+    SDL_SetRenderDrawColor(renderer, themeManager.getTheme().bg_r, themeManager.getTheme().bg_g, themeManager.getTheme().bg_b, 255);
+    SDL_RenderFillRect(renderer, &virtualArea);
+    
+    // Set clipping to virtual area - all subsequent layers will respect this
+    SDL_RenderSetClipRect(renderer, &virtualArea);
 }
 int BackgroundLayer::getZOrder() const { return 0; }
 std::string BackgroundLayer::getName() const { return "Background"; }
 
 // BannerLayer
 void BannerLayer::render(SDL_Renderer* renderer, const GameState&, const LayoutCache& layout) {
-    // Draw banner background (rounded)
-    drawRoundedFilled(renderer, layout.BX, layout.BY, layout.BW, layout.BH, 10,
-                      themeManager.getTheme().banner_bg_r, themeManager.getTheme().banner_bg_g, themeManager.getTheme().banner_bg_b, 255);
+    if (!layout.bannerConfig.enabled) return;
     
-    // Draw outline
-    drawRoundedOutline(renderer, layout.BX, layout.BY, layout.BW, layout.BH, 10, 2,
-                       themeManager.getTheme().banner_outline_r, themeManager.getTheme().banner_outline_g, themeManager.getTheme().banner_outline_b, themeManager.getTheme().banner_outline_a);
-
-    // Draw text (vertical)
-    int bty = layout.BY + 10, cxText = layout.BX + (layout.BW - 5 * layout.scale) / 2;
+    // Use new layout system if configured, otherwise fall back to legacy
+    int x = layout.bannerRect.w > 0 ? layout.bannerRect.x : layout.BX;
+    int y = layout.bannerRect.w > 0 ? layout.bannerRect.y : layout.BY;
+    int w = layout.bannerRect.w > 0 ? layout.bannerRect.w : layout.BW;
+    int h = layout.bannerRect.w > 0 ? layout.bannerRect.h : layout.BH;
+    
+    // Draw banner background (rounded with elliptical corners in STRETCH mode)
+    // Uses ThemeManager for colors (proper separation of concerns)
+    drawRoundedFilled(renderer, x, y, w, h, layout.borderRadiusX, layout.borderRadiusY,
+                      themeManager.getTheme().banner_bg_r,
+                      themeManager.getTheme().banner_bg_g,
+                      themeManager.getTheme().banner_bg_b, 255);
+    
+    // Draw outline (before text so text is not covered)
+    drawRoundedOutline(renderer, x, y, w, h, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
+                       themeManager.getTheme().banner_outline_r,
+                       themeManager.getTheme().banner_outline_g,
+                       themeManager.getTheme().banner_outline_b,
+                       themeManager.getTheme().banner_outline_a);
+    
+    // Draw text (vertical) - distorts in STRETCH mode - LAST so it's on top
+    int bty = y + scaleOffsetY(10, layout);
+    int cxText = x + (int)(w - 5 * layout.scaleTextX) / 2;
+    
     for (size_t i = 0; i < TITLE_TEXT.size(); ++i) {
         char ch = TITLE_TEXT[i];
-        if (ch == ' ') { bty += 6 * layout.scale; continue; }
+        if (ch == ' ') { bty += scaleTextSpacing(6, layout); continue; }
         ch = (char)std::toupper((unsigned char)ch);
-        if (ch < 'A' || ch > 'Z') ch = ' ';
-        drawPixelText(renderer, cxText, bty, std::string(1, ch), layout.scale,
-                      themeManager.getTheme().banner_text_r, themeManager.getTheme().banner_text_g, themeManager.getTheme().banner_text_b);
-        bty += 9 * layout.scale;
+        // Allow A-Z, 0-9, and special chars (-, :, .)
+        if (!((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == ':' || ch == '.')) {
+            ch = ' ';
+        }
+        drawPixelText(renderer, cxText, bty, std::string(1, ch), layout.scaleTextX, layout.scaleTextY,
+                      themeManager.getTheme().banner_text_r,
+                      themeManager.getTheme().banner_text_g,
+                      themeManager.getTheme().banner_text_b);
+        bty += scaleTextSpacing(9, layout);
     }
 }
 int BannerLayer::getZOrder() const { return 1; }
@@ -67,9 +144,15 @@ std::string BannerLayer::getName() const { return "Banner"; }
 
 // BoardLayer
 void BoardLayer::render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) {
-    for (int y = 0; y < layout.GH / layout.cellBoard; ++y) {
-        for (int x = 0; x < layout.GW / layout.cellBoard; ++x) {
-            SDL_Rect r{layout.GX + x * layout.cellBoard, layout.GY + y * layout.cellBoard, layout.cellBoard - 1, layout.cellBoard - 1};
+    // Use separate W/H for cells (STRETCH mode can have rectangular cells)
+    int cellW = (int)layout.cellBoardW;
+    int cellH = (int)layout.cellBoardH;
+    int cellSpacingW = scaleCellSpacing(1, layout.scaleX);
+    int cellSpacingH = scaleCellSpacing(1, layout.scaleY);
+    
+    for (int y = 0; y < layout.GH / cellH; ++y) {
+        for (int x = 0; x < layout.GW / cellW; ++x) {
+            SDL_Rect r{layout.GX + x * cellW, layout.GY + y * cellH, cellW - cellSpacingW, cellH - cellSpacingH};
             SDL_SetRenderDrawColor(renderer, themeManager.getTheme().board_empty_r, themeManager.getTheme().board_empty_g, themeManager.getTheme().board_empty_b, 255);
             SDL_RenderFillRect(renderer, &r);
         }
@@ -80,7 +163,7 @@ void BoardLayer::render(SDL_Renderer* renderer, const GameState& state, const La
                 for (int x = 0; x < cols; ++x) {
                     Uint8 r,g,b; bool occ; if (!db_getBoardCell(state, x, y, r, g, b, occ)) continue;
                     if (occ) {
-                        SDL_Rect rr{layout.GX + x * layout.cellBoard, layout.GY + y * layout.cellBoard, layout.cellBoard - 1, layout.cellBoard - 1};
+                        SDL_Rect rr{layout.GX + x * cellW, layout.GY + y * cellH, cellW - cellSpacingW, cellH - cellSpacingH};
                         SDL_SetRenderDrawColor(renderer, r, g, b, 255);
                         SDL_RenderFillRect(renderer, &rr);
                     }
@@ -102,9 +185,9 @@ void BoardLayer::render(SDL_Renderer* renderer, const GameState& state, const La
             int gx = ax + pr.first;
             int gy = ay + pr.second;
             if (gx < 0 || gx >= cols || gy < 0 || gy >= rows) continue;
-            SDL_Rect rr{layout.GX + gx * layout.cellBoard,
-                        layout.GY + gy * layout.cellBoard,
-                        layout.cellBoard - 1, layout.cellBoard - 1};
+            SDL_Rect rr{layout.GX + gx * cellW,
+                        layout.GY + gy * cellH,
+                        cellW - cellSpacingW, cellH - cellSpacingH};
             SDL_SetRenderDrawColor(renderer, pc.r, pc.g, pc.b, 255);
             SDL_RenderFillRect(renderer, &rr);
             ++drawn;
@@ -118,79 +201,99 @@ std::string BoardLayer::getName() const { return "Board"; }
 
 // HUDLayer
 void HUDLayer::render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) {
-    // Painel principal do HUD (à direita)
-    drawRoundedFilled(renderer, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12,
+    if (!layout.hudConfig.enabled) return;
+    
+    // Use new layout system if configured, otherwise fall back to legacy
+    int x = layout.hudRect.w > 0 ? layout.hudRect.x : layout.panelX;
+    int y = layout.hudRect.w > 0 ? layout.hudRect.y : layout.panelY;
+    int w = layout.hudRect.w > 0 ? layout.hudRect.w : layout.panelW;
+    int h = layout.hudRect.w > 0 ? layout.hudRect.h : layout.panelH;
+    
+    // Painel principal do HUD (à direita) - elliptical corners in STRETCH mode
+    drawRoundedFilled(renderer, x, y, w, h, layout.borderRadiusX, layout.borderRadiusY,
                       themeManager.getTheme().panel_fill_r, themeManager.getTheme().panel_fill_g, themeManager.getTheme().panel_fill_b, 255);
-    drawRoundedOutline(renderer, layout.panelX, layout.panelY, layout.panelW, layout.panelH, 12, 2,
+    drawRoundedOutline(renderer, x, y, w, h, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
                        themeManager.getTheme().panel_outline_r, themeManager.getTheme().panel_outline_g, themeManager.getTheme().panel_outline_b, themeManager.getTheme().panel_outline_a);
-    
-    int tx = layout.panelX + 14, ty = layout.panelY + 14;
-    auto fmtScore = [](int s){ char b[32]; std::snprintf(b,sizeof(b), "%d", s); return std::string(b); };
-    int score = db_getScore(state);
-    int lines = db_getLines(state);
-    int level = db_getLevel(state);
-    
-    // Score, Lines, Level (centralizados)
-    drawPixelText(renderer, tx, ty, "SCORE", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
-    ty += 10 * layout.scale;
-    drawPixelText(renderer, tx, ty, fmtScore(score), layout.scale + 1, themeManager.getTheme().hud_score_r, themeManager.getTheme().hud_score_g, themeManager.getTheme().hud_score_b); 
-    ty += 12 * (layout.scale + 1);
-    drawPixelText(renderer, tx, ty, "LINES", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
-    ty += 10 * layout.scale;
-    drawPixelText(renderer, tx, ty, std::to_string(lines), layout.scale, themeManager.getTheme().hud_lines_r, themeManager.getTheme().hud_lines_g, themeManager.getTheme().hud_lines_b); 
-    ty += 12 * layout.scale;
-    drawPixelText(renderer, tx, ty, "LEVEL", layout.scale, themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
-    ty += 10 * layout.scale;
-    drawPixelText(renderer, tx, ty, std::to_string(level), layout.scale, themeManager.getTheme().hud_level_r, themeManager.getTheme().hud_level_g, themeManager.getTheme().hud_level_b); 
-    ty += 12 * layout.scale;
+}
 
-    // NEXT preview - abaixo do score, centralizado
-    ty += 6 * layout.scale;
-    int nextIdx = 0; 
+// NextLayer (independent preview box)
+void NextLayer::render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) {
+    if (!layout.nextConfig.enabled) return;
+    
+    // Get next piece index
+    int nextIdx = 0;
     if (!db_getNextIdx(state, nextIdx)) return;
+    
+    // Use new layout system if configured, otherwise fall back to legacy (inside HUD)
+    int x = layout.nextRect.w > 0 ? layout.nextRect.x : -1;
+    int y = layout.nextRect.w > 0 ? layout.nextRect.y : -1;
+    int w = layout.nextRect.w > 0 ? layout.nextRect.w : -1;
+    int h = layout.nextRect.w > 0 ? layout.nextRect.h : -1;
+    
+    // Skip if not configured (will render in HUD as legacy)
+    if (x < 0 || w <= 0) return;
+    
+    // Calculate grid size
     int gridCols = std::max(4, std::min(10, pieceManager.getPreviewGrid()));
     int gridRows = gridCols;
-    int cellMini = layout.cellBoard;
-    int gridW = gridCols * cellMini, gridH = gridRows * cellMini;
-    int pad = 10;
-    int labelH = 10 * layout.scale;
-    int nextBoxW = gridW + pad * 2;
-    int nextBoxH = gridH + pad * 2 + labelH;
+    // In STRETCH mode, cells distort like board cells; in AUTO/NATIVE they stay square
+    int cellMiniW = (int)(layout.cellBoardW * 0.6f);  // Smaller than board cells
+    int cellMiniH = (int)(layout.cellBoardH * 0.6f);
+    int gridW = gridCols * cellMiniW;
+    int gridH = gridRows * cellMiniH;
+    int pad = scaleOffsetY(10, layout);
+    int labelH = (int)(10 * layout.scaleTextY);
     
-    // Centralizar NEXT no painel
-    int nextBoxX = layout.panelX + (layout.panelW - nextBoxW) / 2;
-    int nextBoxY = ty;
-    int gridX = nextBoxX + pad;
-    int gridY = nextBoxY + pad;
+    // Use the configured rectangle
+    int boxX = x;
+    int boxY = y;
+    int boxW = w;
+    int boxH = h;
     
-    // Caixa arredondada para o NEXT
-    drawRoundedFilled(renderer, nextBoxX, nextBoxY, nextBoxW, nextBoxH, 10,
-                      themeManager.getTheme().next_fill_r, themeManager.getTheme().next_fill_g, themeManager.getTheme().next_fill_b, 255);
-    drawRoundedOutline(renderer, nextBoxX, nextBoxY, nextBoxW, nextBoxH, 10, 2,
-                       themeManager.getTheme().next_outline_r, themeManager.getTheme().next_outline_g, themeManager.getTheme().next_outline_b, themeManager.getTheme().next_outline_a);
+    // Draw background - elliptical corners in STRETCH mode
+    drawRoundedFilled(renderer, boxX, boxY, boxW, boxH, layout.borderRadiusX, layout.borderRadiusY,
+                      themeManager.getTheme().next_fill_r, themeManager.getTheme().next_fill_g, 
+                      themeManager.getTheme().next_fill_b, 255);
+    drawRoundedOutline(renderer, boxX, boxY, boxW, boxH, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
+                       themeManager.getTheme().next_outline_r, themeManager.getTheme().next_outline_g, 
+                       themeManager.getTheme().next_outline_b, themeManager.getTheme().next_outline_a);
     
-    // Texto "NEXT" centralizado dentro da caixa
+    // Draw "NEXT" label - text distorts in STRETCH mode
     std::string nextText = "NEXT";
-    int nextW = textWidthPx(nextText, layout.scale);
-    int nextTextX = nextBoxX + (nextBoxW - nextW) / 2;
-    int nextTextY = nextBoxY + pad / 2;
-    drawPixelText(renderer, nextTextX, nextTextY, nextText, layout.scale, 
-                 themeManager.getTheme().hud_label_r, 
-                 themeManager.getTheme().hud_label_g, 
-                 themeManager.getTheme().hud_label_b);
+    int nextW = textWidthPx(nextText, layout.scaleTextX);
+    int textX = boxX + (boxW - nextW) / 2;
+    int textY = boxY + pad*2;  // Aumentado de pad/2 para pad (mais para baixo)
+    drawPixelText(renderer, textX, textY, nextText, layout.scaleTextX, layout.scaleTextY,
+                 themeManager.getTheme().next_label_r,
+                 themeManager.getTheme().next_label_g,
+                 themeManager.getTheme().next_label_b);
     
-    gridY += labelH;
+    // Calculate grid position (centered in box)
+    int gridX = boxX + (boxW - gridW) / 2;
+    int gridY = boxY + labelH + pad*2;
     
-    // Desenha grid xadrez do NEXT
+    // Adjust grid to fit if box is too small
+    if (gridY + gridH > boxY + boxH - pad) {
+        gridY = boxY + boxH - gridH - pad;
+    }
+    
+    // Draw checkerboard grid (distorts in STRETCH mode)
     for (int gy = 0; gy < gridRows; ++gy) {
         for (int gx = 0; gx < gridCols; ++gx) {
-            SDL_Rect q{gridX + gx * cellMini, gridY + gy * cellMini, cellMini - 1, cellMini - 1};
+            // IMPORTANT: Cell spacing must be scaled too!
+                SDL_Rect q{gridX + gx * cellMiniW, gridY + gy * cellMiniH,
+                           cellMiniW - scaleCellSpacing(1, layout.scaleX), 
+                           cellMiniH - scaleCellSpacing(1, layout.scaleY)};
             bool isLight = ((gx + gy) & 1) != 0;
             if (themeManager.getTheme().next_grid_use_rgb) {
                 if (isLight)
-                    SDL_SetRenderDrawColor(renderer, themeManager.getTheme().next_grid_light_r, themeManager.getTheme().next_grid_light_g, themeManager.getTheme().next_grid_light_b, 255);
+                    SDL_SetRenderDrawColor(renderer, themeManager.getTheme().next_grid_light_r, 
+                                          themeManager.getTheme().next_grid_light_g, 
+                                          themeManager.getTheme().next_grid_light_b, 255);
                 else
-                    SDL_SetRenderDrawColor(renderer, themeManager.getTheme().next_grid_dark_r, themeManager.getTheme().next_grid_dark_g, themeManager.getTheme().next_grid_dark_b, 255);
+                    SDL_SetRenderDrawColor(renderer, themeManager.getTheme().next_grid_dark_r, 
+                                          themeManager.getTheme().next_grid_dark_g, 
+                                          themeManager.getTheme().next_grid_dark_b, 255);
             } else {
                 Uint8 v = isLight ? themeManager.getTheme().next_grid_light : themeManager.getTheme().next_grid_dark;
                 SDL_SetRenderDrawColor(renderer, v, v, v, 255);
@@ -199,23 +302,25 @@ void HUDLayer::render(SDL_Renderer* renderer, const GameState& state, const Layo
         }
     }
     
-    // Desenha peça centralizada no grid do NEXT
+    // Draw centered piece (distorts in STRETCH mode)
     if (nextIdx >= 0 && nextIdx < (int)PIECES.size()) {
         const auto& pc = PIECES[nextIdx];
         if (!pc.rot.empty() && !pc.rot[0].empty()) {
             int minx = 999, maxx = -999, miny = 999, maxy = -999;
-            for (auto [px,py] : pc.rot[0]) { 
-                if (px < minx) minx = px; 
-                if (px > maxx) maxx = px; 
-                if (py < miny) miny = py; 
-                if (py > maxy) maxy = py; 
+            for (auto [px,py] : pc.rot[0]) {
+                if (px < minx) minx = px;
+                if (px > maxx) maxx = px;
+                if (py < miny) miny = py;
+                if (py > maxy) maxy = py;
             }
             int blocksW = (maxx - minx + 1);
             int blocksH = (maxy - miny + 1);
-            int startX = gridX + (gridW - blocksW * cellMini) / 2 - minx * cellMini;
-            int startY = gridY + (gridH - blocksH * cellMini) / 2 - miny * cellMini;
+            int startX = gridX + (gridW - blocksW * cellMiniW) / 2 - minx * cellMiniW;
+            int startY = gridY + (gridH - blocksH * cellMiniH) / 2 - miny * cellMiniH;
             for (auto [px,py] : pc.rot[0]) {
-                SDL_Rect rr{ startX + px * cellMini, startY + py * cellMini, cellMini - 1, cellMini - 1 };
+            SDL_Rect rr{startX + px * cellMiniW, startY + py * cellMiniH,
+                           cellMiniW - scaleCellSpacing(1, layout.scaleX), 
+                           cellMiniH - scaleCellSpacing(1, layout.scaleY)};
                 SDL_SetRenderDrawColor(renderer, pc.r, pc.g, pc.b, 255);
                 SDL_RenderFillRect(renderer, &rr);
             }
@@ -228,48 +333,38 @@ void PieceStatsLayer::render(SDL_Renderer* renderer, const GameState& state, con
     const std::vector<int>* pieceStats = nullptr;
     if (!db_getPieceStats(state, pieceStats) || pieceStats == nullptr || PIECES.empty()) return;
     
-    // Calcular tamanho da caixa de estatísticas
-    int cellSize = layout.cellBoard + 4;
-    int miniCellSize = std::max(2, layout.cellBoard / 3);
-    int rowHeight = cellSize + 2;
+    // Calcular tamanho da caixa de estatísticas (distorce em STRETCH mode)
+    // Peças maiores (50% do tamanho do board, não 33%)
+    int miniCellW = std::max(2, (int)(layout.cellBoardW / 2));
+    int miniCellH = std::max(2, (int)(layout.cellBoardH / 2));
+    int cellSizeW = (int)(miniCellW * 4.5f);  // Espaço para 4 blocos + margem
+    int cellSizeH = (int)(miniCellH * 4.5f);
+    int rowHeight = cellSizeH + scaleOffsetY(4, layout);
     int numPieces = (int)PIECES.size();
-    int statsLabelH = 10 * layout.scale;
-    int statsPad = 10;
+    int statsPad = scaleOffsetY(10, layout);
     
-    // Usar valores pré-calculados do layout
-    std::string statsTitle = "PIECES";
-    int titleW = textWidthPx(statsTitle, layout.scale);
-    int numberScale = std::max(1, layout.scale / 2);
-    int innerPad = 16;
+    if (!layout.statsConfig.enabled) return;
     
-    // Usar largura e margem do layout (calculados em LayoutHelpers)
-    int statsBoxW = layout.statsBoxW;
-    int statsBoxX = layout.BX + layout.BW + layout.statsMargin;
-    int statsBoxY = layout.GY;
-    int statsBoxH = layout.GH;
+    // Use new layout system if configured, otherwise fall back to legacy
+    int statsBoxX = layout.statsRect.w > 0 ? layout.statsRect.x : (layout.BX + layout.BW + layout.statsMargin);
+    int statsBoxY = layout.statsRect.w > 0 ? layout.statsRect.y : layout.GY;
+    int statsBoxW = layout.statsRect.w > 0 ? layout.statsRect.w : layout.statsBoxW;
+    int statsBoxH = layout.statsRect.w > 0 ? layout.statsRect.h : layout.GH;
     
-    // Desenhar caixa ao redor das estatísticas
-    drawRoundedFilled(renderer, statsBoxX, statsBoxY, statsBoxW, statsBoxH, 10,
+    // Desenhar caixa ao redor das estatísticas - elliptical corners in STRETCH mode
+    drawRoundedFilled(renderer, statsBoxX, statsBoxY, statsBoxW, statsBoxH, layout.borderRadiusX, layout.borderRadiusY,
                       themeManager.getTheme().next_fill_r, 
                       themeManager.getTheme().next_fill_g, 
                       themeManager.getTheme().next_fill_b, 255);
-    drawRoundedOutline(renderer, statsBoxX, statsBoxY, statsBoxW, statsBoxH, 10, 2,
+    drawRoundedOutline(renderer, statsBoxX, statsBoxY, statsBoxW, statsBoxH, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
                        themeManager.getTheme().next_outline_r, 
                        themeManager.getTheme().next_outline_g, 
                        themeManager.getTheme().next_outline_b, 
                        themeManager.getTheme().next_outline_a);
     
-    // Título "PIECES"
-    int titleX = statsBoxX + (statsBoxW - titleW) / 2;
-    int titleY = statsBoxY + statsPad / 2;
-    drawPixelText(renderer, titleX, titleY, statsTitle, layout.scale,
-                 themeManager.getTheme().stats_label_r,
-                 themeManager.getTheme().stats_label_g,
-                 themeManager.getTheme().stats_label_b);
-    
-    // Renderizar estatísticas de cada peça
-    int statY = statsBoxY + statsLabelH + statsPad / 2;
-    int statX = statsBoxX + innerPad;
+    // Renderizar estatísticas de cada peça (sem título, peças centralizadas)
+    int statY = statsBoxY + statsPad;
+    int statX = statsBoxX + (statsBoxW - cellSizeW) / 2;  // Centralizar horizontalmente
     
     for (size_t i = 0; i < PIECES.size(); ++i) {
         int count = 0;
@@ -279,7 +374,7 @@ void PieceStatsLayer::render(SDL_Renderer* renderer, const GameState& state, con
         
         const auto& pc = PIECES[i];
         
-        // Desenhar miniatura da peça
+        // Desenhar miniatura da peça CENTRALIZADA no bloco (distorce em STRETCH mode)
         if (!pc.rot.empty() && !pc.rot[0].empty()) {
             int minx = 999, maxx = -999, miny = 999, maxy = -999;
             for (auto [px,py] : pc.rot[0]) {
@@ -291,25 +386,32 @@ void PieceStatsLayer::render(SDL_Renderer* renderer, const GameState& state, con
             int blocksW = (maxx - minx + 1);
             int blocksH = (maxy - miny + 1);
             
-            int startX = statX + (cellSize - blocksW * miniCellSize) / 2 - minx * miniCellSize;
-            int startY = statY + (cellSize - blocksH * miniCellSize) / 2 - miny * miniCellSize;
+            // Centralizar peça no bloco completo
+            int startX = statX + (cellSizeW - blocksW * miniCellW) / 2 - minx * miniCellW;
+            int startY = statY + (cellSizeH - blocksH * miniCellH) / 2 - miny * miniCellH;
             
             for (auto [px,py] : pc.rot[0]) {
-                SDL_Rect rr{startX + px * miniCellSize, startY + py * miniCellSize, 
-                           miniCellSize - 1, miniCellSize - 1};
+                SDL_Rect rr{startX + px * miniCellW, startY + py * miniCellH, 
+                           miniCellW - scaleCellSpacing(1, layout.scaleX), 
+                           miniCellH - scaleCellSpacing(1, layout.scaleY)};
                 SDL_SetRenderDrawColor(renderer, pc.r, pc.g, pc.b, 255);
                 SDL_RenderFillRect(renderer, &rr);
             }
         }
         
-        // Contagem alinhada à direita com tamanho reduzido
+        // Contagem CENTRALIZADA SOBRE a peça com outline preto
         std::string countStr = std::to_string(count);
-        int countW = textWidthPx(countStr, numberScale);
-        int countX = statsBoxX + statsBoxW - countW - innerPad;
-        drawPixelText(renderer, countX, statY + cellSize / 2 - 2, countStr, numberScale,
-                     themeManager.getTheme().stats_count_r,
-                     themeManager.getTheme().stats_count_g,
-                     themeManager.getTheme().stats_count_b);
+        float numberScaleX = layout.scaleTextX * 0.8f;  // Um pouco maior que antes
+        float numberScaleY = layout.scaleTextY * 0.8f;
+        int countW = textWidthPx(countStr, numberScaleX);
+        int countX = statX + (cellSizeW - countW) / 2;  // Centralizar
+        int countY = statY + (cellSizeH - (int)(7 * numberScaleY)) / 2;  // Centralizar verticalmente
+        
+        drawPixelTextOutlined(renderer, countX, countY, countStr, numberScaleX, numberScaleY,
+                             themeManager.getTheme().stats_count_r,
+                             themeManager.getTheme().stats_count_g,
+                             themeManager.getTheme().stats_count_b,
+                             0, 0, 0);  // Outline preto
         
         statY += rowHeight;
     }
@@ -324,6 +426,89 @@ int BoardLayer::getZOrder() const { return 3; } // Mudado de 2 para 3
 int HUDLayer::getZOrder() const { return 4; } // Mudado de 3 para 4
 std::string HUDLayer::getName() const { return "HUD"; }
 
+// NextLayer
+int NextLayer::getZOrder() const { return 5; } // Independent NEXT preview
+std::string NextLayer::getName() const { return "Next"; }
+
+// ScoreLayer (independent score/lines/level box)
+void ScoreLayer::render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) {
+    if (!layout.scoreConfig.enabled) return;
+    
+    // Get score data
+    auto fmtScore = [](int s){ char b[32]; std::snprintf(b,sizeof(b), "%d", s); return std::string(b); };
+    int score = db_getScore(state);
+    int lines = db_getLines(state);
+    int level = db_getLevel(state);
+    
+    // Use new layout system if configured
+    int boxX = layout.scoreRect.w > 0 ? layout.scoreRect.x : -1;
+    int boxY = layout.scoreRect.w > 0 ? layout.scoreRect.y : -1;
+    int boxW = layout.scoreRect.w > 0 ? layout.scoreRect.w : -1;
+    int boxH = layout.scoreRect.w > 0 ? layout.scoreRect.h : -1;
+    
+    // Skip if not configured
+    if (boxX < 0 || boxW <= 0) return;
+    
+    // Draw box background
+    drawRoundedFilled(renderer, boxX, boxY, boxW, boxH, layout.borderRadiusX, layout.borderRadiusY,
+                      themeManager.getTheme().score_fill_r, themeManager.getTheme().score_fill_g, 
+                      themeManager.getTheme().score_fill_b, 255);
+    drawRoundedOutline(renderer, boxX, boxY, boxW, boxH, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
+                       themeManager.getTheme().score_outline_r, themeManager.getTheme().score_outline_g, 
+                       themeManager.getTheme().score_outline_b, themeManager.getTheme().score_outline_a);
+    
+    // Same top margin as NEXT (pad*2 for consistency)
+    int pad = scaleOffsetY(10, layout);
+    int textPad = scaleOffsetX(20, layout);  // Larger right margin for numbers
+    int ty = boxY + pad*2;  // Same top margin as NEXT
+    
+    // SCORE (centered label, right-aligned number)
+    std::string scoreLabel = "SCORE";
+    int scoreLabelW = textWidthPx(scoreLabel, layout.scaleTextX);
+    int labelX = boxX + (boxW - scoreLabelW) / 2;  // Centered
+    drawPixelText(renderer, labelX, ty, scoreLabel, layout.scaleTextX, layout.scaleTextY, 
+                  themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
+    ty += scaleTextSpacing(10, layout);
+    
+    std::string scoreStr = fmtScore(score);
+    int scoreW = textWidthPx(scoreStr, layout.scaleTextX);
+    int scoreX = boxX + boxW - scoreW - textPad;  // Right-aligned
+    drawPixelText(renderer, scoreX, ty, scoreStr, layout.scaleTextX, layout.scaleTextY,
+                  themeManager.getTheme().hud_score_r, themeManager.getTheme().hud_score_g, themeManager.getTheme().hud_score_b); 
+    ty += scaleTextSpacing(14, layout);
+    
+    // LINES (centered label, right-aligned number)
+    std::string linesLabel = "LINES";
+    int linesLabelW = textWidthPx(linesLabel, layout.scaleTextX);
+    labelX = boxX + (boxW - linesLabelW) / 2;
+    drawPixelText(renderer, labelX, ty, linesLabel, layout.scaleTextX, layout.scaleTextY,
+                  themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
+    ty += scaleTextSpacing(10, layout);
+    
+    std::string linesStr = std::to_string(lines);
+    int linesW = textWidthPx(linesStr, layout.scaleTextX);
+    int linesX = boxX + boxW - linesW - textPad;
+    drawPixelText(renderer, linesX, ty, linesStr, layout.scaleTextX, layout.scaleTextY,
+                  themeManager.getTheme().hud_lines_r, themeManager.getTheme().hud_lines_g, themeManager.getTheme().hud_lines_b); 
+    ty += scaleTextSpacing(14, layout);
+    
+    // LEVEL (centered label, right-aligned number)
+    std::string levelLabel = "LEVEL";
+    int levelLabelW = textWidthPx(levelLabel, layout.scaleTextX);
+    labelX = boxX + (boxW - levelLabelW) / 2;
+    drawPixelText(renderer, labelX, ty, levelLabel, layout.scaleTextX, layout.scaleTextY,
+                  themeManager.getTheme().hud_label_r, themeManager.getTheme().hud_label_g, themeManager.getTheme().hud_label_b); 
+    ty += scaleTextSpacing(10, layout);
+    
+    std::string levelStr = std::to_string(level);
+    int levelW = textWidthPx(levelStr, layout.scaleTextX);
+    int levelX = boxX + boxW - levelW - textPad;
+    drawPixelText(renderer, levelX, ty, levelStr, layout.scaleTextX, layout.scaleTextY,
+                  themeManager.getTheme().hud_level_r, themeManager.getTheme().hud_level_g, themeManager.getTheme().hud_level_b); 
+}
+int ScoreLayer::getZOrder() const { return 5; } // Same Z as Next
+std::string ScoreLayer::getName() const { return "Score"; }
+
 // OverlayLayer
 void OverlayLayer::render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) {
     const bool isPaused = db_isPaused(state);
@@ -331,36 +516,51 @@ void OverlayLayer::render(SDL_Renderer* renderer, const GameState& state, const 
     if (isGameOver || isPaused) {
         const std::string topText = isPaused ? "PAUSE" : "GAME OVER";
         const std::string subText = isPaused ? "" : "PRESS START";
-        int topW = textWidthPx(topText, layout.scale + 2);
-        int subW = subText.empty() ? 0 : textWidthPx(subText, layout.scale);
+        // Text distorts in STRETCH mode
+        float topScaleX = layout.scaleTextX * (layout.scale + 2) / layout.scale;
+        float topScaleY = layout.scaleTextY * (layout.scale + 2) / layout.scale;
+        int topW = textWidthPx(topText, topScaleX);
+        int subW = subText.empty() ? 0 : textWidthPx(subText, layout.scaleTextX);
         int textW = std::max(topW, subW);
-        int padX = 24, padY = 20;
-        int textH = 7 * (layout.scale + 2) + (subText.empty() ? 0 : (8 * layout.scale + 7 * layout.scale));
+        int padX = scaleOffsetX(24, layout);
+        int padY = scaleOffsetY(20, layout);
+        int textH = (int)(7 * topScaleY) + (subText.empty() ? 0 : (int)(8 * layout.scaleTextY + 7 * layout.scaleTextY));
         int ow = textW + padX * 2, oh = textH + padY * 2;
         int ox = layout.GX + (layout.GW - ow) / 2, oy = layout.GY + (layout.GH - oh) / 2;
-        drawRoundedFilled(renderer, ox, oy, ow, oh, 14, themeManager.getTheme().overlay_fill_r, themeManager.getTheme().overlay_fill_g, themeManager.getTheme().overlay_fill_b, themeManager.getTheme().overlay_fill_a);
-        drawRoundedOutline(renderer, ox, oy, ow, oh, 14, 2, themeManager.getTheme().overlay_outline_r, themeManager.getTheme().overlay_outline_g, themeManager.getTheme().overlay_outline_b, themeManager.getTheme().overlay_outline_a);
+        // Elliptical corners in STRETCH mode - calculate from virtual 14 radius
+        int overlayRadX = scaleOffsetX(14, layout);
+        int overlayRadY = scaleOffsetY(14, layout);
+        drawRoundedFilled(renderer, ox, oy, ow, oh, overlayRadX, overlayRadY, themeManager.getTheme().overlay_fill_r, themeManager.getTheme().overlay_fill_g, themeManager.getTheme().overlay_fill_b, themeManager.getTheme().overlay_fill_a);
+        drawRoundedOutline(renderer, ox, oy, ow, oh, overlayRadX, overlayRadY, 2, themeManager.getTheme().overlay_outline_r, themeManager.getTheme().overlay_outline_g, themeManager.getTheme().overlay_outline_b, themeManager.getTheme().overlay_outline_a);
         int txc = ox + (ow - topW) / 2, tyc = oy + padY;
-        drawPixelTextOutlined(renderer, txc, tyc, topText, layout.scale + 2, themeManager.getTheme().overlay_top_r, themeManager.getTheme().overlay_top_g, themeManager.getTheme().overlay_top_b, 0, 0, 0);
+        drawPixelTextOutlined(renderer, txc, tyc, topText, topScaleX, topScaleY, themeManager.getTheme().overlay_top_r, themeManager.getTheme().overlay_top_g, themeManager.getTheme().overlay_top_b, 0, 0, 0);
         if (!subText.empty()) {
-            int sx = ox + (ow - subW) / 2, sy = tyc + 7 * (layout.scale + 2) + 8 * layout.scale;
-            drawPixelTextOutlined(renderer, sx, sy, subText, layout.scale, themeManager.getTheme().overlay_sub_r, themeManager.getTheme().overlay_sub_g, themeManager.getTheme().overlay_sub_b, 0, 0, 0);
+            int sx = ox + (ow - subW) / 2, sy = tyc + (int)(7 * topScaleY + 8 * layout.scaleTextY);
+            drawPixelTextOutlined(renderer, sx, sy, subText, layout.scaleTextX, layout.scaleTextY, themeManager.getTheme().overlay_sub_r, themeManager.getTheme().overlay_sub_g, themeManager.getTheme().overlay_sub_b, 0, 0, 0);
         }
     }
 }
-int OverlayLayer::getZOrder() const { return 5; } // Mudado de 4 para 5
+int OverlayLayer::getZOrder() const { return 6; } // Mudado de 4 para 6 (NextLayer is 5)
 std::string OverlayLayer::getName() const { return "Overlay"; }
 
 // PostEffectsLayer
 PostEffectsLayer::PostEffectsLayer(AudioSystem* audio) : audio_(audio) {}
 void PostEffectsLayer::render(SDL_Renderer* renderer, const GameState&, const LayoutCache& layout) {
     if (layout.SWr <= 0 || layout.SHr <= 0) { return; }
+    
+    // Calculate virtual area bounds (same as BackgroundLayer)
+    int virtualAreaX = layout.offsetX;
+    int virtualAreaY = layout.offsetY;
+    int virtualAreaW = (int)(layout.virtualWidth * layout.scaleX);
+    int virtualAreaH = (int)(layout.virtualHeight * layout.scaleY);
+    
     const auto& vis = db_getVisualEffects();
     if (vis.scanlineAlpha > 0) {
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, (Uint8)vis.scanlineAlpha);
-        for (int y = 0; y < layout.SHr; y += 2) {
-            SDL_Rect sl{0, y, layout.SWr, 1};
+        // Scanlines only in virtual area
+        for (int y = virtualAreaY; y < virtualAreaY + virtualAreaH; y += 2) {
+            SDL_Rect sl{virtualAreaX, y, virtualAreaW, 1};
             SDL_RenderFillRect(renderer, &sl);
         }
         if (audio_) audio_->playScanlineEffect();
@@ -368,14 +568,14 @@ void PostEffectsLayer::render(SDL_Renderer* renderer, const GameState&, const La
     if (vis.globalSweep) {
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
         float tsec = SDL_GetTicks() / 1000.0f;
-        int bandH = vis.sweepGBandHPx;
+        int bandH = (int)(vis.sweepGBandHPx * layout.scaleY); // Scale sweep band with virtual area
         if (bandH < 1) { SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE); DebugLogger::info("PostEffectsLayer: skip sweep (bandH<1)"); return; }
-        if (bandH > layout.SHr) bandH = layout.SHr;
+        if (bandH > virtualAreaH) bandH = virtualAreaH;
         if (bandH > 1024) bandH = 1024; // safety cap to keep frame responsive
-        float speed = (float)vis.sweepGSpeedPxps;
+        float speed = (float)vis.sweepGSpeedPxps * layout.scaleY; // Scale speed with virtual area
         if (speed < 1.0f) speed = 1.0f;
         if (speed > 4000.0f) speed = 4000.0f;
-        int total = layout.SHr + bandH;
+        int total = virtualAreaH + bandH;
         int sweepY = (int)std::fmod(tsec * speed, (float)total) - bandH;
         for (int i = 0; i < bandH; ++i) {
             float normalizedPos = (float)i / (float)bandH;
@@ -385,9 +585,9 @@ void PostEffectsLayer::render(SDL_Renderer* renderer, const GameState&, const La
             float softness = std::exp(-(distance * distance) / (2.0f * sigma * sigma));
             Uint8 a = (Uint8)std::round(vis.sweepGAlphaMax * softness);
             SDL_SetRenderDrawColor(renderer, 255, 255, 255, a);
-            int yy = sweepY + i;
-            if (yy >= 0 && yy < layout.SHr) {
-                SDL_Rect line{0, yy, layout.SWr, 1};
+            int yy = virtualAreaY + sweepY + i;
+            if (yy >= virtualAreaY && yy < virtualAreaY + virtualAreaH) {
+                SDL_Rect line{virtualAreaX, yy, virtualAreaW, 1};
                 SDL_RenderFillRect(renderer, &line);
             }
         }
@@ -397,7 +597,7 @@ void PostEffectsLayer::render(SDL_Renderer* renderer, const GameState&, const La
         if (audio_) audio_->playSweepEffect();
     }
 }
-int PostEffectsLayer::getZOrder() const { return 6; } // Mudado de 5 para 6
+int PostEffectsLayer::getZOrder() const { return 7; } // Mudado de 5 para 7 (NextLayer is 5)
 std::string PostEffectsLayer::getName() const { return "PostEffects"; }
 
 

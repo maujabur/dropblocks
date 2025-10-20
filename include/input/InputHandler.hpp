@@ -16,6 +16,7 @@ public:
     virtual bool shouldRotateCW() = 0;
     virtual bool shouldPause() = 0;
     virtual bool shouldRestart() = 0;
+    virtual bool shouldForceRestart() = 0;  // Restart even before game over
     virtual bool shouldQuit() = 0;
     virtual bool shouldScreenshot() = 0;
 

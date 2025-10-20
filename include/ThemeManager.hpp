@@ -39,6 +39,11 @@ struct Theme {
     Uint8 next_outline_r=80, next_outline_g=80, next_outline_b=110;
     Uint8 next_outline_a=160;
     Uint8 next_label_r=220, next_label_g=220, next_label_b=220;
+    
+    // Score box colors
+    Uint8 score_fill_r=18, score_fill_g=18, score_fill_b=26;
+    Uint8 score_outline_r=80, score_outline_g=80, score_outline_b=110;
+    Uint8 score_outline_a=160;
     Uint8 next_grid_dark=24, next_grid_light=30; // grayscale fallback
     // Colored grid (prioritary if defined)
     Uint8 next_grid_dark_r=24, next_grid_dark_g=24, next_grid_dark_b=24;

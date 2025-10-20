@@ -14,6 +14,8 @@
 - [ ] Verificar o processo de atribuição de cores padrão para as peças
 - [ ] Add HUD region showing dropped piece counts by type
 - [ ] Remove cursor
+- [ ] verificar consistencia na formatacao de cor entre arquivos cfg e pieces (com e sem #)
+- [ ] investigar a aplicacao de scan lines, verificar seu impacto no processamento e resolver retira-las ou deixa-las mais evidentes
 
 ## DESIRED Features
 

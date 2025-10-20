@@ -37,6 +37,11 @@ bool JoystickInput::shouldRestart() {
     return joystickSystem_ ? joystickSystem_->shouldRestart() : false;
 }
 
+bool JoystickInput::shouldForceRestart() {
+    // Joystick force restart not implemented (keyboard only for now)
+    return false;
+}
+
 bool JoystickInput::shouldQuit() {
     return joystickSystem_ ? joystickSystem_->shouldQuit() : false;
 }

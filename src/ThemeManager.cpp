@@ -51,9 +51,76 @@ void ThemeManager::applyPieceColors(const std::vector<Piece>& pieces) {
 }
 
 bool ThemeManager::loadFromConfig(const std::string& key, const std::string& value) {
-    if (key == "BG") {
+    if (key == "BG" || key == "BACKGROUND") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.bg_r=r; theme_.bg_g=g; theme_.bg_b=b; return true; }
     }
+    if (key == "BOARD_EMPTY") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.board_empty_r=r; theme_.board_empty_g=g; theme_.board_empty_b=b; return true; }
+    }
+    if (key == "PANEL_FILL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.panel_fill_r=r; theme_.panel_fill_g=g; theme_.panel_fill_b=b; return true; }
+    }
+    if (key == "PANEL_OUTLINE") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.panel_outline_r=r; theme_.panel_outline_g=g; theme_.panel_outline_b=b; return true; }
+    }
+    if (key == "PANEL_OUTLINE_ALPHA") {
+        theme_.panel_outline_a = (Uint8)std::stoi(value); return true;
+    }
+    
+    // === BANNER ===
+    if (key == "BANNER_BG") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.banner_bg_r=r; theme_.banner_bg_g=g; theme_.banner_bg_b=b; return true; }
+    }
+    if (key == "BANNER_OUTLINE") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.banner_outline_r=r; theme_.banner_outline_g=g; theme_.banner_outline_b=b; return true; }
+    }
+    if (key == "BANNER_OUTLINE_ALPHA") {
+        theme_.banner_outline_a = (Uint8)std::stoi(value); return true;
+    }
+    if (key == "BANNER_TEXT") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.banner_text_r=r; theme_.banner_text_g=g; theme_.banner_text_b=b; return true; }
+    }
+    
+    // === HUD (novo!) ===
+    if (key == "HUD_LABEL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.hud_label_r=r; theme_.hud_label_g=g; theme_.hud_label_b=b; return true; }
+    }
+    if (key == "HUD_SCORE") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.hud_score_r=r; theme_.hud_score_g=g; theme_.hud_score_b=b; return true; }
+    }
+    if (key == "HUD_LINES") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.hud_lines_r=r; theme_.hud_lines_g=g; theme_.hud_lines_b=b; return true; }
+    }
+    if (key == "HUD_LEVEL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.hud_level_r=r; theme_.hud_level_g=g; theme_.hud_level_b=b; return true; }
+    }
+    
+    // === NEXT (novo!) ===
+    if (key == "NEXT_FILL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.next_fill_r=r; theme_.next_fill_g=g; theme_.next_fill_b=b; return true; }
+    }
+    if (key == "NEXT_OUTLINE") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.next_outline_r=r; theme_.next_outline_g=g; theme_.next_outline_b=b; return true; }
+    }
+    if (key == "NEXT_OUTLINE_ALPHA") {
+        theme_.next_outline_a = (Uint8)std::stoi(value); return true;
+    }
+    if (key == "NEXT_LABEL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.next_label_r=r; theme_.next_label_g=g; theme_.next_label_b=b; return true; }
+    }
+    
+    // === SCORE ===
+    if (key == "SCORE_FILL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.score_fill_r=r; theme_.score_fill_g=g; theme_.score_fill_b=b; return true; }
+    }
+    if (key == "SCORE_OUTLINE") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.score_outline_r=r; theme_.score_outline_g=g; theme_.score_outline_b=b; return true; }
+    }
+    if (key == "SCORE_OUTLINE_ALPHA") {
+        theme_.score_outline_a = (Uint8)std::stoi(value); return true;
+    }
+    
+    // === STATS (já existente, mantido) ===
     if (key == "STATS_LABEL") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_label_r=r; theme_.stats_label_g=g; theme_.stats_label_b=b; return true; }
     }
@@ -63,6 +130,27 @@ bool ThemeManager::loadFromConfig(const std::string& key, const std::string& val
     if (key == "STATS_PIECE_NAME") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_piece_name_r=r; theme_.stats_piece_name_g=g; theme_.stats_piece_name_b=b; return true; }
     }
+    
+    // === OVERLAY (novo!) ===
+    if (key == "OVERLAY_FILL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.overlay_fill_r=r; theme_.overlay_fill_g=g; theme_.overlay_fill_b=b; return true; }
+    }
+    if (key == "OVERLAY_FILL_ALPHA") {
+        theme_.overlay_fill_a = (Uint8)std::stoi(value); return true;
+    }
+    if (key == "OVERLAY_OUTLINE") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.overlay_outline_r=r; theme_.overlay_outline_g=g; theme_.overlay_outline_b=b; return true; }
+    }
+    if (key == "OVERLAY_OUTLINE_ALPHA") {
+        theme_.overlay_outline_a = (Uint8)std::stoi(value); return true;
+    }
+    if (key == "OVERLAY_TOP") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.overlay_top_r=r; theme_.overlay_top_g=g; theme_.overlay_top_b=b; return true; }
+    }
+    if (key == "OVERLAY_SUB") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.overlay_sub_r=r; theme_.overlay_sub_g=g; theme_.overlay_sub_b=b; return true; }
+    }
+    
     return false;
 }
 

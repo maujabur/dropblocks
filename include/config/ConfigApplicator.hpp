@@ -48,5 +48,10 @@ void applyConfigToPieces(const PiecesConfig& config, ThemeManager& themeManager)
  */
 void applyConfigToJoystick(InputManager& inputManager, const InputConfig& config);
 
+/**
+ * @brief Apply layout configuration to global layoutConfig
+ */
+void applyConfigToLayout(const LayoutConfig& config);
+
 } // namespace ConfigApplicator
 

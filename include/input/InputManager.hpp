@@ -44,6 +44,7 @@ public:
     bool shouldRotateCW() override { for (auto& h : handlers) if (h->isConnected() && h->shouldRotateCW()) return true; return false; }
     bool shouldPause() override { for (auto& h : handlers) if (h->isConnected() && h->shouldPause()) return true; return false; }
     bool shouldRestart() override { for (auto& h : handlers) if (h->isConnected() && h->shouldRestart()) return true; return false; }
+    bool shouldForceRestart() override { for (auto& h : handlers) if (h->isConnected() && h->shouldForceRestart()) return true; return false; }
     bool shouldQuit() override {
         if (quitRequested) return true;
         for (auto& h : handlers) if (h->isConnected() && h->shouldQuit()) return true; return false;

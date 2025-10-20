@@ -25,16 +25,29 @@ void DebugOverlay::update(float deltaMs) {
 void DebugOverlay::render(SDL_Renderer* renderer, int screenWidth, int screenHeight) {
     if (!enabled_ || !renderer) return;
     
-    // Position in top-right corner
-    int x = screenWidth - 250;
-    int y = 10;
+    // Position in top-right corner of VIRTUAL area (not screen)
+    // Use virtual area bounds to keep debug overlay inside clipped region
+    int virtualAreaX = offsetX_;
+    int virtualAreaY = offsetY_;
+    int virtualAreaW = (int)(virtualW_ * scaleX_);
+    int virtualAreaH = (int)(virtualH_ * scaleY_);
+    
+    // Debug overlay dimensions
+    int debugWidth = 240;
+    int debugMargin = 10;
+    
+    // Position relative to virtual area, with margin from edges
+    // Ensure it stays within virtual bounds
+    int x = virtualAreaX + virtualAreaW - debugWidth - debugMargin;
+    if (x < virtualAreaX + debugMargin) x = virtualAreaX + debugMargin;  // Clamp to virtual area
+    int y = virtualAreaY + 10;
     int lineHeight = 30;
     int scale = 2;
     
-    // Semi-transparent background (increased height for extra line)
+    // Semi-transparent background (increased height for layout info)
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
-    SDL_Rect bg = {x - 10, y - 5, 240, 230};
+    SDL_Rect bg = {x - 10, y - 5, 240, 400};
     SDL_RenderFillRect(renderer, &bg);
     
     // Border
@@ -71,6 +84,57 @@ void DebugOverlay::render(SDL_Renderer* renderer, int screenWidth, int screenHei
     drawPixelText(renderer, x, y, "        (60 FPS)", scale, 150, 150, 150);
     y += lineHeight;
     
+    // Layout information
+    if (virtualW_ > 0) {
+        y += 5; // Small gap
+        drawPixelText(renderer, x, y, "LAYOUT:", scale, 255, 200, 100);
+        y += lineHeight;
+        
+        {
+            std::ostringstream oss;
+            oss << "Virt: " << virtualW_ << "x" << virtualH_;
+            drawPixelText(renderer, x, y, oss.str(), scale, 200, 200, 200);
+        }
+        y += lineHeight;
+        
+        {
+            std::ostringstream oss;
+            oss << "Phys: " << physicalW_ << "x" << physicalH_;
+            // Highlight if different
+            Uint8 r = (physicalW_ == virtualW_ && physicalH_ == virtualH_) ? 200 : 255;
+            Uint8 g = (physicalW_ == virtualW_ && physicalH_ == virtualH_) ? 200 : 100;
+            drawPixelText(renderer, x, y, oss.str(), scale, r, g, 100);
+        }
+        y += lineHeight;
+        
+        {
+            std::ostringstream oss;
+            oss << "Mode: " << scaleMode_;
+            drawPixelText(renderer, x, y, oss.str(), scale, 200, 200, 200);
+        }
+        y += lineHeight;
+        
+        {
+            std::ostringstream oss;
+            oss << "Scl: " << std::fixed << std::setprecision(3) << scaleX_ << "," << scaleY_;
+            // Highlight if scale is not 1:1
+            Uint8 r = (scaleX_ == 1.0f && scaleY_ == 1.0f) ? 200 : 255;
+            Uint8 g = (scaleX_ == 1.0f && scaleY_ == 1.0f) ? 200 : 100;
+            drawPixelText(renderer, x, y, oss.str(), scale, r, g, 100);
+        }
+        y += lineHeight;
+        
+        {
+            std::ostringstream oss;
+            oss << "Off: " << offsetX_ << "," << offsetY_;
+            // Highlight if offset is not 0,0
+            Uint8 r = (offsetX_ == 0 && offsetY_ == 0) ? 200 : 255;
+            Uint8 g = (offsetX_ == 0 && offsetY_ == 0) ? 200 : 100;
+            drawPixelText(renderer, x, y, oss.str(), scale, r, g, 100);
+        }
+        y += lineHeight;
+    }
+    
     // Custom values
     if (!customName1_.empty()) {
         std::string line = customName1_ + ": " + customValue1_;
@@ -95,5 +159,19 @@ void DebugOverlay::setCustomValue(const std::string& name, const std::string& va
         customName2_ = name;
         customValue2_ = value;
     }
+}
+
+void DebugOverlay::setLayoutInfo(int virtualW, int virtualH, int physicalW, int physicalH,
+                                  float scaleX, float scaleY, int offsetX, int offsetY,
+                                  const std::string& scaleMode) {
+    virtualW_ = virtualW;
+    virtualH_ = virtualH;
+    physicalW_ = physicalW;
+    physicalH_ = physicalH;
+    scaleX_ = scaleX;
+    scaleY_ = scaleY;
+    offsetX_ = offsetX;
+    offsetY_ = offsetY;
+    scaleMode_ = scaleMode;
 }
 

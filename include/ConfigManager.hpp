@@ -14,6 +14,7 @@ private:
     InputConfig input_;
     PiecesConfig pieces_;
     GameConfig game_;
+    LayoutConfig layout_;
 
     std::vector<std::string> configPaths_;
     std::map<std::string, std::string> overrides_;
@@ -26,6 +27,10 @@ public:
     const InputConfig& getInput() const override { return input_; }
     const PiecesConfig& getPieces() const override { return pieces_; }
     const GameConfig& getGame() const override { return game_; }
+
+    // Layout getters (new)
+    const LayoutConfig& getLayout() const { return layout_; }
+    LayoutConfig& getLayout() { return layout_; }
 
     // Mutating getters (for internal configuration flow)
     VisualConfig& getVisual() { return visual_; }

@@ -43,6 +43,20 @@ public:
     std::string getName() const override;
 };
 
+class NextLayer : public RenderLayer {
+public:
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override;
+    int getZOrder() const override;
+    std::string getName() const override;
+};
+
+class ScoreLayer : public RenderLayer {
+public:
+    void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override;
+    int getZOrder() const override;
+    std::string getName() const override;
+};
+
 class OverlayLayer : public RenderLayer {
 public:
     void render(SDL_Renderer* renderer, const GameState& state, const LayoutCache& layout) override;

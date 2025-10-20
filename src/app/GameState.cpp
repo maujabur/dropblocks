@@ -201,6 +201,13 @@ void GameState::handleInput(SDL_Renderer* renderer) {
         audio_->playBeep(isPaused() ? 440.0 : 520.0, 30, 0.12f, false);
     }
     
+    // Force restart (R key) - works anytime
+    if (input_->shouldForceRestart()) {
+        restartRound();
+        return;
+    }
+    
+    // Normal restart (RETURN) - only on game over
     if (isGameOver() && input_->shouldRestart()) {
         restartRound();
         return;
