@@ -80,8 +80,9 @@ void JoystickConfig::setAnalogSettings(float deadzone, float sensitivity, bool i
     invertYAxis = invertY;
 }
 
-void JoystickConfig::setTiming(Uint32 moveDelay, Uint32 softDropDelay) {
-    moveRepeatDelay = moveDelay;
+void JoystickConfig::setTiming(Uint32 moveDelayDAS, Uint32 moveDelayARR, Uint32 softDropDelay) {
+    moveRepeatDelayDAS = moveDelayDAS;
+    moveRepeatDelayARR = moveDelayARR;
     softDropRepeatDelay = softDropDelay;
 }
 
@@ -107,6 +108,10 @@ void JoystickState::updateButtonStates(const JoystickDevice& device, const Joyst
     // Update analog states
     // Always use joystick API for generic joysticks, even if detected as game controller
     if (device.getJoystick()) {
+        // Store previous analog values
+        lastLeftStickX = leftStickX;
+        lastLeftStickY = leftStickY;
+        
         // Regular joystick axes - this works for both generic joysticks and game controllers
         leftStickX = SDL_JoystickGetAxis(device.getJoystick(), 0) / 32767.0f;
         leftStickY = SDL_JoystickGetAxis(device.getJoystick(), 1) / 32767.0f;
@@ -133,6 +138,74 @@ bool JoystickState::isButtonPressed(int button) const {
 
 void JoystickState::resetTimers() {
     lastMoveTime = SDL_GetTicks();
+    leftPressTime = 0;
+    rightPressTime = 0;
+    downPressTime = 0;
+}
+
+// DAS/ARR timing functions (matching keyboard implementation)
+bool JoystickState::shouldMoveHorizontalAnalog(float analogValue, Uint32& pressTime, const JoystickConfig& config, bool positive) {
+    Uint32 now = SDL_GetTicks();
+    bool isActive = positive ? (analogValue > config.analogDeadzone) : (analogValue < -config.analogDeadzone);
+    
+    if (!isActive) {
+        pressTime = 0;
+        return false;
+    }
+    
+    // Just pressed (first time active)
+    if (pressTime == 0) {
+        pressTime = now;
+        lastMoveTime = now;
+        return true;
+    }
+    
+    // Held down - check DAS then ARR
+    Uint32 heldTime = now - pressTime;
+    
+    // After DAS delay, use ARR for continuous movement
+    if (heldTime > config.moveRepeatDelayDAS && (now - lastMoveTime) > config.moveRepeatDelayARR) {
+        lastMoveTime = now;
+        return true;
+    }
+    
+    return false;
+}
+
+bool JoystickState::shouldMoveVerticalAnalog(float analogValue, Uint32& pressTime, const JoystickConfig& config, bool positive) {
+    Uint32 now = SDL_GetTicks();
+    bool isActive = positive ? (analogValue > config.analogDeadzone) : (analogValue < -config.analogDeadzone);
+    
+    if (!isActive) {
+        pressTime = 0;
+        return false;
+    }
+    
+    // Just pressed (first time active)
+    if (pressTime == 0) {
+        pressTime = now;
+        lastSoftDropTime = now;
+        return true;
+    }
+    
+    // Held down - use soft drop delay
+    if ((now - lastSoftDropTime) > config.softDropRepeatDelay) {
+        lastSoftDropTime = now;
+        return true;
+    }
+    
+    return false;
+}
+
+// Analog press detection (for rotation)
+bool JoystickState::isAnalogPressed(float currentValue, float lastValue, float deadzone, bool checkNegative) const {
+    if (checkNegative) {
+        // Check if moved from not-pressed to pressed in negative direction
+        return (currentValue < -deadzone) && (lastValue >= -deadzone);
+    } else {
+        // Check if moved from not-pressed to pressed in positive direction
+        return (currentValue > deadzone) && (lastValue <= deadzone);
+    }
 }
 
 // ===========================
@@ -143,21 +216,39 @@ JoystickInputProcessor::JoystickInputProcessor(const JoystickConfig& config, con
     : config_(config), state_(state), device_(device) {}
 
 bool JoystickInputProcessor::shouldMoveLeft() const {
-    return state_.isButtonPressed(config_.buttonLeft) || 
-           (state_.leftStickX < -config_.analogDeadzone && SDL_GetTicks() - state_.lastMoveTime > config_.moveRepeatDelay) ||
-           (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_LEFT));
+    // Button press (instant response)
+    bool buttonPressed = state_.isButtonPressed(config_.buttonLeft) ||
+                        (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_LEFT));
+    
+    if (buttonPressed) return true;
+    
+    // Analog stick with DAS/ARR timing (need to cast away const to update timers)
+    JoystickState& mutableState = const_cast<JoystickState&>(state_);
+    return mutableState.shouldMoveHorizontalAnalog(state_.leftStickX, mutableState.leftPressTime, config_, false);
 }
 
 bool JoystickInputProcessor::shouldMoveRight() const {
-    return state_.isButtonPressed(config_.buttonRight) || 
-           (state_.leftStickX > config_.analogDeadzone && SDL_GetTicks() - state_.lastMoveTime > config_.moveRepeatDelay) ||
-           (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_RIGHT));
+    // Button press (instant response)
+    bool buttonPressed = state_.isButtonPressed(config_.buttonRight) ||
+                        (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_RIGHT));
+    
+    if (buttonPressed) return true;
+    
+    // Analog stick with DAS/ARR timing (need to cast away const to update timers)
+    JoystickState& mutableState = const_cast<JoystickState&>(state_);
+    return mutableState.shouldMoveHorizontalAnalog(state_.leftStickX, mutableState.rightPressTime, config_, true);
 }
 
 bool JoystickInputProcessor::shouldSoftDrop() const {
-    return state_.isButtonPressed(config_.buttonSoftDrop) || 
-           (state_.leftStickY > config_.analogDeadzone && SDL_GetTicks() - state_.lastSoftDropTime > config_.softDropRepeatDelay) ||
-           (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_DOWN));
+    // Button press (instant response)
+    bool buttonPressed = state_.isButtonPressed(config_.buttonSoftDrop) ||
+                        (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_DOWN));
+    
+    if (buttonPressed) return true;
+    
+    // Analog stick with soft drop timing (need to cast away const to update timers)
+    JoystickState& mutableState = const_cast<JoystickState&>(state_);
+    return mutableState.shouldMoveVerticalAnalog(state_.leftStickY, mutableState.downPressTime, config_, true);
 }
 
 bool JoystickInputProcessor::shouldHardDrop() const {
@@ -165,9 +256,17 @@ bool JoystickInputProcessor::shouldHardDrop() const {
 }
 
 bool JoystickInputProcessor::shouldRotateCCW() const {
-    return state_.isButtonPressed(config_.buttonRotateCCW) || 
-           (state_.leftStickY < -config_.analogDeadzone && SDL_GetTicks() - state_.lastMoveTime > config_.moveRepeatDelay) ||
-           (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_UP));
+    // Button press (instant response, no auto-repeat)
+    bool buttonPressed = state_.isButtonPressed(config_.buttonRotateCCW) || 
+                        state_.isButtonPressed(config_.buttonUp) ||
+                        (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_UP));
+    
+    if (buttonPressed) return true;
+    
+    // Analog stick UP - only on "press", not hold (like rotation buttons)
+    bool analogUpPressed = state_.isAnalogPressed(state_.leftStickY, state_.lastLeftStickY, config_.analogDeadzone, true);
+    
+    return analogUpPressed;
 }
 
 bool JoystickInputProcessor::shouldRotateCW() const {

@@ -145,7 +145,8 @@ struct InputConfig {
     int buttonRotateCCW = 0, buttonRotateCW = 1, buttonSoftDrop = 2, buttonHardDrop = 3;
     int buttonPause = 6, buttonStart = 7, buttonQuit = 8;
     float analogDeadzone = 0.3f; float analogSensitivity = 1.0f; bool invertYAxis = false;
-    unsigned int moveRepeatDelay = 200; // ms
+    unsigned int moveRepeatDelayDAS = 170; // ms - Delayed Auto Shift (initial delay)
+    unsigned int moveRepeatDelayARR = 50;  // ms - Auto Repeat Rate (repeat interval)
     unsigned int softDropRepeatDelay = 100; // ms
 };
 

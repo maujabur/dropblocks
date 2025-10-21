@@ -280,11 +280,28 @@ bool processJoystickConfigs(const std::string& key, const std::string& val, int&
         return true;
     }
     
-    // Configurações de timing
+    // Configurações de timing (DAS/ARR system)
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY_DAS") {
+        int v = std::atoi(val.c_str());
+        if (v >= 50 && v <= 1000) {
+            config.moveRepeatDelayDAS = v;
+            processedLines++;
+            return true;
+        }
+    }
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY_ARR") {
+        int v = std::atoi(val.c_str());
+        if (v >= 10 && v <= 200) {
+            config.moveRepeatDelayARR = v;
+            processedLines++;
+            return true;
+        }
+    }
+    // Legacy support: JOYSTICK_MOVE_REPEAT_DELAY sets DAS value
     if (key == "JOYSTICK_MOVE_REPEAT_DELAY") {
         int v = std::atoi(val.c_str());
         if (v >= 50 && v <= 1000) {
-            config.moveRepeatDelay = v;
+            config.moveRepeatDelayDAS = v;
             processedLines++;
             return true;
         }

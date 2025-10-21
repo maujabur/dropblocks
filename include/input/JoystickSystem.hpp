@@ -57,15 +57,16 @@ public:
     float analogSensitivity = 1.0f;  // Sensibilidade do analógico
     bool invertYAxis = false;        // Inverter eixo Y (padrão: false)
     
-    // Timing settings
-    Uint32 moveRepeatDelay = 200;        // ms entre movimentos repetidos
+    // Timing settings (matching keyboard DAS/ARR system)
+    Uint32 moveRepeatDelayDAS = 170;     // DAS: Delayed Auto Shift (initial delay)
+    Uint32 moveRepeatDelayARR = 50;      // ARR: Auto Repeat Rate (repeat interval)
     Uint32 softDropRepeatDelay = 100;    // ms entre soft drops repetidos
     
     // Configuration methods
     void setButtonMapping(int left, int right, int down, int up, int rotCCW, int rotCW, 
                          int softDrop, int hardDrop, int pause, int start, int quit);
     void setAnalogSettings(float deadzone, float sensitivity, bool invertY);
-    void setTiming(Uint32 moveDelay, Uint32 softDropDelay);
+    void setTiming(Uint32 moveDelayDAS, Uint32 moveDelayARR, Uint32 softDropDelay);
 };
 
 /**
@@ -85,14 +86,28 @@ public:
     float rightStickX = 0.0f;
     float rightStickY = 0.0f;
     
-    // Timers
+    // Previous analog states (for press detection)
+    float lastLeftStickX = 0.0f;
+    float lastLeftStickY = 0.0f;
+    
+    // Timers for DAS/ARR system (matching keyboard)
     Uint32 lastMoveTime = 0;
     Uint32 lastSoftDropTime = 0;
+    Uint32 leftPressTime = 0;     // When left movement started
+    Uint32 rightPressTime = 0;    // When right movement started
+    Uint32 downPressTime = 0;     // When down movement started
     
     // State management
     void updateButtonStates(const JoystickDevice& device, const JoystickConfig& config);
     bool isButtonPressed(int button) const;
     void resetTimers();
+    
+    // DAS/ARR timing functions (matching keyboard implementation)
+    bool shouldMoveHorizontalAnalog(float analogValue, Uint32& pressTime, const JoystickConfig& config, bool positive);
+    bool shouldMoveVerticalAnalog(float analogValue, Uint32& pressTime, const JoystickConfig& config, bool positive);
+    
+    // Analog press detection (for rotation)
+    bool isAnalogPressed(float currentValue, float lastValue, float deadzone, bool checkNegative) const;
 };
 
 /**

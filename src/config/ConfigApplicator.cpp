@@ -232,8 +232,9 @@ void applyConfigToJoystick(InputManager& inputManager, const InputConfig& config
             joystickConfig.analogSensitivity = config.analogSensitivity;
             joystickConfig.invertYAxis = config.invertYAxis;
             
-            // Apply timing settings
-            joystickConfig.moveRepeatDelay = config.moveRepeatDelay;
+            // Apply timing settings (DAS/ARR system)
+            joystickConfig.moveRepeatDelayDAS = config.moveRepeatDelayDAS;
+            joystickConfig.moveRepeatDelayARR = config.moveRepeatDelayARR;
             joystickConfig.softDropRepeatDelay = config.softDropRepeatDelay;
             
             break; // Only configure the first joystick found

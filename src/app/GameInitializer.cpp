@@ -8,6 +8,7 @@
 #include "render/RenderLayer.hpp"
 #include "render/RenderManager.hpp"
 #include "input/KeyboardInput.hpp"
+#include "input/JoystickInput.hpp"
 #include "input/InputHandler.hpp"
 #include "ThemeManager.hpp"
 #include "pieces/PieceManager.hpp"
@@ -48,8 +49,20 @@ bool GameInitializer::initializeAudio(AudioSystem& audio) {
 
 bool GameInitializer::initializeInput(InputManager& inputManager) {
     if (inputInitialized_) return true;
+    
+    // Add keyboard input
     auto keyboardInput = std::make_unique<KeyboardInput>();
     inputManager.addHandler(std::move(keyboardInput));
+    
+    // Add joystick input
+    auto joystickInput = std::make_unique<JoystickInput>();
+    if (joystickInput->initialize()) {
+        DebugLogger::info("Joystick input initialized successfully");
+        inputManager.addHandler(std::move(joystickInput));
+    } else {
+        DebugLogger::warning("No joystick/controller found, continuing with keyboard only");
+    }
+    
     inputInitialized_ = true;
     return true;
 }

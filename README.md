@@ -1,13 +1,15 @@
 # DropBlocks 🎮
 
-A modern, customizable falling blocks game inspired by Tetris®, built with C++ and SDL2. Features advanced visual effects, customizable themes, and multiple piece sets.
+A modern, customizable falling blocks game inspired by Tetris®, built with C++ and SDL2. Features advanced visual effects, customizable themes, complete joystick support, and multiple piece sets.
 
-**Version 8.8** - Enhanced Theme System + Debug Cleanup
+**Version 9.0** - Complete Joystick Analog & DAS/ARR System
 
 ![DropBlocks Screenshot](images/screenshot.bmp)
 
 ## ✨ Features
 
+- **Complete Joystick Support**: Full analog stick + D-pad support with professional DAS/ARR timing
+- **Advanced Input System**: Keyboard and joystick with identical timing characteristics
 - **Authentic Retro Themes**: Phosphor green, amber CRT monitor themes
 - **Cyberpunk Aesthetics**: Neon-noir theme with vibrant colors
 - **Rainbow Spectrum**: Full spectrum color theme
@@ -61,8 +63,9 @@ DropBlocks now includes authentic retro-inspired themes:
 ./dropblocks rainbow.cfg   # Rainbow spectrum theme
 ```
 
-## �🎮 Controls
+##  Controls
 
+### Keyboard
 | Key | Action |
 |-----|--------|
 | `←` `→` | Move piece left/right |
@@ -74,6 +77,22 @@ DropBlocks now includes authentic retro-inspired themes:
 | `ENTER` | Restart (after Game Over) |
 | `ESC` | Quit |
 | `F12` | Screenshot |
+
+### Joystick/Gamepad
+| Control | Action |
+|---------|--------|
+| **Left Stick** / **D-pad** | Move pieces and navigate |
+| **A Button** / **D-pad Up** | Rotate counter-clockwise |
+| **B Button** | Rotate clockwise |
+| **X Button** | Soft drop |
+| **Y Button** | Hard drop |
+| **Start** | Restart game |
+| **Back** | Pause |
+
+**Advanced Features:**
+- **DAS/ARR Timing**: Professional 170ms/50ms timing system (matches competitive standards)
+- **Analog Support**: Full analog stick support with configurable deadzone
+- **Auto-detection**: Automatically detects and configures most joysticks/gamepads
 
 ## 🚀 Quick Start
 

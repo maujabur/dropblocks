@@ -57,9 +57,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "8.8"
-#define DROPBLOCKS_BUILD_INFO "Theme System Enhanced + Debug Cleanup"
-#define DROPBLOCKS_FEATURES "Phosphor Green/Amber/Neon themes, Clean UI, Hidden cursor"
+#define DROPBLOCKS_VERSION "9.0"
+#define DROPBLOCKS_BUILD_INFO "Complete Joystick Analog & DAS/ARR System"
+#define DROPBLOCKS_FEATURES "Complete Joystick Support + DAS/ARR, 4 Retro Themes, Clean UI"
 
 // Math constant (if not defined by system)
 #ifndef M_PI

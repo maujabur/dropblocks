@@ -226,7 +226,10 @@ bool InputConfigParser::parse(const std::string& key, const std::string& value) 
     if (key == "JOYSTICK_ANALOG_DEADZONE") { config_.analogDeadzone = parseFloat(value); return true; }
     if (key == "JOYSTICK_ANALOG_SENSITIVITY") { config_.analogSensitivity = parseFloat(value); return true; }
     if (key == "JOYSTICK_INVERT_Y_AXIS") { config_.invertYAxis = parseBool(value); return true; }
-    if (key == "JOYSTICK_MOVE_REPEAT_DELAY") { config_.moveRepeatDelay = (unsigned int)parseInt(value); return true; }
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY_DAS") { config_.moveRepeatDelayDAS = (unsigned int)parseInt(value); return true; }
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY_ARR") { config_.moveRepeatDelayARR = (unsigned int)parseInt(value); return true; }
+    // Legacy support
+    if (key == "JOYSTICK_MOVE_REPEAT_DELAY") { config_.moveRepeatDelayDAS = (unsigned int)parseInt(value); return true; }
     if (key == "JOYSTICK_SOFT_DROP_REPEAT_DELAY" || key == "JOYSTICK_SOFT_DROP_DELAY") { config_.softDropRepeatDelay = (unsigned int)parseInt(value); return true; }
     return false;
 }
