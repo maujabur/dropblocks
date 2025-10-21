@@ -2,6 +2,7 @@
 
 #include <SDL2/SDL.h>
 #include <string>
+#include <vector>
 
 /**
  * @brief Debug overlay for development
@@ -64,6 +65,11 @@ public:
                        float scaleX, float scaleY, int offsetX, int offsetY,
                        const std::string& scaleMode);
     
+    /**
+     * @brief Set configuration file debug information
+     */
+    void setConfigInfo(const std::vector<std::string>& configPaths);
+    
 private:
     bool enabled_ = false;
     float fps_ = 0.0f;
@@ -90,5 +96,8 @@ private:
     int offsetX_ = 0;
     int offsetY_ = 0;
     std::string scaleMode_ = "UNKNOWN";
+    
+    // Config debug info
+    std::string configFiles_ = "None";
 };
 

@@ -10,8 +10,6 @@
 // External globals from dropblocks.cpp
 extern int ROUNDED_PANELS;
 extern int HUD_FIXED_SCALE;
-extern int GAP1_SCALE;
-extern int GAP2_SCALE;
 extern std::string TITLE_TEXT;
 extern std::string PIECES_FILE_PATH;
 extern int SPEED_ACCELERATION;
@@ -95,8 +93,6 @@ bool processBasicConfigs(const std::string& key, const std::string& val, int& pr
     // Layout shortcuts kept for backward compatibility
     if (seti("ROUNDED_PANELS", ROUNDED_PANELS)) { processedLines++; return true; }
     if (seti("HUD_FIXED_SCALE", HUD_FIXED_SCALE)) { processedLines++; return true; }
-    if (seti("GAP1_SCALE", GAP1_SCALE)) { processedLines++; return true; }
-    if (seti("GAP2_SCALE", GAP2_SCALE)) { processedLines++; return true; }
     
     return false;
 }
@@ -149,9 +145,7 @@ bool processThemeColors(const std::string& key, const std::string& val, int& pro
     if (setrgb("OVERLAY_TOP", tm.getTheme().overlay_top_r, tm.getTheme().overlay_top_g, tm.getTheme().overlay_top_b)) { processedLines++; return true; }
     if (setrgb("OVERLAY_SUB", tm.getTheme().overlay_sub_r, tm.getTheme().overlay_sub_g, tm.getTheme().overlay_sub_b)) { processedLines++; return true; }
 
-    // Alpha values
-    if (seta("PANEL_OUTLINE_A", tm.getTheme().panel_outline_a)) { processedLines++; return true; }
-    if (seta("NEXT_OUTLINE_A", tm.getTheme().next_outline_a)) { processedLines++; return true; }
+    // Alpha values (only overlay needs transparency)
     if (seta("OVERLAY_FILL_A", tm.getTheme().overlay_fill_a)) { processedLines++; return true; }
     if (seta("OVERLAY_OUTLINE_A", tm.getTheme().overlay_outline_a)) { processedLines++; return true; }
 

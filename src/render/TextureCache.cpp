@@ -52,11 +52,6 @@ void TextureCache::update(SDL_Renderer* renderer, const LayoutCache& layout, The
                              theme.getTheme().banner_bg_r, 
                              theme.getTheme().banner_bg_g, 
                              theme.getTheme().banner_bg_b, 255);
-            drawRoundedOutline(renderer, 0, 0, bannerW, bannerH, layout.borderRadius, layout.borderThickness,
-                              theme.getTheme().banner_outline_r, 
-                              theme.getTheme().banner_outline_g, 
-                              theme.getTheme().banner_outline_b, 
-                              theme.getTheme().banner_outline_a);
             
             SDL_SetRenderTarget(renderer, nullptr);
         }
@@ -70,15 +65,16 @@ void TextureCache::update(SDL_Renderer* renderer, const LayoutCache& layout, The
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             SDL_RenderClear(renderer);
             
+            // DEBUG: Log stats texture colors
+            char statsDebug[256];
+            snprintf(statsDebug, sizeof(statsDebug), "TextureCache Stats - fill: #%02x%02x%02x, outline: #%02x%02x%02x", 
+                     theme.getTheme().stats_fill_r, theme.getTheme().stats_fill_g, theme.getTheme().stats_fill_b,
+                     theme.getTheme().stats_outline_r, theme.getTheme().stats_outline_g, theme.getTheme().stats_outline_b);
+
             drawRoundedFilled(renderer, 0, 0, statsW, statsH, layout.borderRadius,
-                             theme.getTheme().next_fill_r, 
-                             theme.getTheme().next_fill_g, 
-                             theme.getTheme().next_fill_b, 255);
-            drawRoundedOutline(renderer, 0, 0, statsW, statsH, layout.borderRadius, layout.borderThickness,
-                              theme.getTheme().next_outline_r, 
-                              theme.getTheme().next_outline_g, 
-                              theme.getTheme().next_outline_b, 
-                              theme.getTheme().next_outline_a);
+                             theme.getTheme().stats_fill_r, 
+                             theme.getTheme().stats_fill_g, 
+                             theme.getTheme().stats_fill_b, 255);
             
             SDL_SetRenderTarget(renderer, nullptr);
         }
@@ -96,18 +92,12 @@ void TextureCache::update(SDL_Renderer* renderer, const LayoutCache& layout, The
                              theme.getTheme().panel_fill_r, 
                              theme.getTheme().panel_fill_g, 
                              theme.getTheme().panel_fill_b, 255);
-            drawRoundedOutline(renderer, 0, 0, hudW, hudH, layout.borderRadius, layout.borderThickness,
-                              theme.getTheme().panel_outline_r, 
-                              theme.getTheme().panel_outline_g, 
-                              theme.getTheme().panel_outline_b, 
-                              theme.getTheme().panel_outline_a);
             
             SDL_SetRenderTarget(renderer, nullptr);
         }
     }
     
     valid_ = true;
-    DebugLogger::info("Texture cache updated successfully");
 }
 
 void TextureCache::cleanup() {

@@ -1,5 +1,6 @@
 #include "ThemeManager.hpp"
 #include "ConfigTypes.hpp"
+#include "DebugLogger.hpp"
 #include <vector>
 #include <array>
 #include <utility>
@@ -63,9 +64,6 @@ bool ThemeManager::loadFromConfig(const std::string& key, const std::string& val
     if (key == "PANEL_OUTLINE") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.panel_outline_r=r; theme_.panel_outline_g=g; theme_.panel_outline_b=b; return true; }
     }
-    if (key == "PANEL_OUTLINE_ALPHA") {
-        theme_.panel_outline_a = (Uint8)std::stoi(value); return true;
-    }
     
     // === BANNER ===
     if (key == "BANNER_BG") {
@@ -73,9 +71,6 @@ bool ThemeManager::loadFromConfig(const std::string& key, const std::string& val
     }
     if (key == "BANNER_OUTLINE") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.banner_outline_r=r; theme_.banner_outline_g=g; theme_.banner_outline_b=b; return true; }
-    }
-    if (key == "BANNER_OUTLINE_ALPHA") {
-        theme_.banner_outline_a = (Uint8)std::stoi(value); return true;
     }
     if (key == "BANNER_TEXT") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.banner_text_r=r; theme_.banner_text_g=g; theme_.banner_text_b=b; return true; }
@@ -102,9 +97,6 @@ bool ThemeManager::loadFromConfig(const std::string& key, const std::string& val
     if (key == "NEXT_OUTLINE") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.next_outline_r=r; theme_.next_outline_g=g; theme_.next_outline_b=b; return true; }
     }
-    if (key == "NEXT_OUTLINE_ALPHA") {
-        theme_.next_outline_a = (Uint8)std::stoi(value); return true;
-    }
     if (key == "NEXT_LABEL") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.next_label_r=r; theme_.next_label_g=g; theme_.next_label_b=b; return true; }
     }
@@ -116,19 +108,19 @@ bool ThemeManager::loadFromConfig(const std::string& key, const std::string& val
     if (key == "SCORE_OUTLINE") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.score_outline_r=r; theme_.score_outline_g=g; theme_.score_outline_b=b; return true; }
     }
-    if (key == "SCORE_OUTLINE_ALPHA") {
-        theme_.score_outline_a = (Uint8)std::stoi(value); return true;
-    }
     
     // === STATS (já existente, mantido) ===
     if (key == "STATS_LABEL") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_label_r=r; theme_.stats_label_g=g; theme_.stats_label_b=b; return true; }
     }
+    if (key == "STATS_FILL") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_fill_r=r; theme_.stats_fill_g=g; theme_.stats_fill_b=b; return true; }
+    }
+    if (key == "STATS_OUTLINE") {
+        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_outline_r=r; theme_.stats_outline_g=g; theme_.stats_outline_b=b; return true; }
+    }
     if (key == "STATS_COUNT") {
         Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_count_r=r; theme_.stats_count_g=g; theme_.stats_count_b=b; return true; }
-    }
-    if (key == "STATS_PIECE_NAME") {
-        Uint8 r, g, b; if (parseHexColor(value, r, g, b)) { theme_.stats_piece_name_r=r; theme_.stats_piece_name_g=g; theme_.stats_piece_name_b=b; return true; }
     }
     
     // === OVERLAY (novo!) ===

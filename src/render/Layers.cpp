@@ -13,6 +13,9 @@
 #include <algorithm>
 #include <cmath>
 #include <string>
+#include <sstream>
+#include <iomanip>
+#include <ios>
 
 // Externals from main translation unit
 extern ThemeManager themeManager;
@@ -75,14 +78,13 @@ namespace {
 
 // BackgroundLayer
 void BackgroundLayer::render(SDL_Renderer* renderer, const GameState&, const LayoutCache& layout) {
-    // ALWAYS render black background first (full screen)
+    // Clear entire renderer with black first
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     
-    // Then render configured BG color ONLY in the virtual area (transformed to physical)
-    // This applies to ALL modes (AUTO, STRETCH, NATIVE)
-    int virtualAreaX = layout.offsetX;
-    int virtualAreaY = layout.offsetY;
+    // Calculate virtual rendering area (centered on screen)
+    int virtualAreaX = (int)((layout.SWr - layout.virtualWidth * layout.scaleX) / 2);
+    int virtualAreaY = (int)((layout.SHr - layout.virtualHeight * layout.scaleY) / 2);
     int virtualAreaW = (int)(layout.virtualWidth * layout.scaleX);
     int virtualAreaH = (int)(layout.virtualHeight * layout.scaleY);
     
@@ -112,13 +114,6 @@ void BannerLayer::render(SDL_Renderer* renderer, const GameState&, const LayoutC
                       themeManager.getTheme().banner_bg_r,
                       themeManager.getTheme().banner_bg_g,
                       themeManager.getTheme().banner_bg_b, 255);
-    
-    // Draw outline (before text so text is not covered)
-    drawRoundedOutline(renderer, x, y, w, h, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
-                       themeManager.getTheme().banner_outline_r,
-                       themeManager.getTheme().banner_outline_g,
-                       themeManager.getTheme().banner_outline_b,
-                       themeManager.getTheme().banner_outline_a);
     
     // Draw text (vertical) - distorts in STRETCH mode - LAST so it's on top
     int bty = y + scaleOffsetY(10, layout);
@@ -192,11 +187,10 @@ void BoardLayer::render(SDL_Renderer* renderer, const GameState& state, const La
             SDL_RenderFillRect(renderer, &rr);
             ++drawn;
         }
-        if (drawn == 0) {
-            DebugLogger::info("BoardLayer: active piece not drawn (offboard?)");
-        }
+        // Remove debug log for missing active piece
     }
 }
+
 std::string BoardLayer::getName() const { return "Board"; }
 
 // HUDLayer
@@ -212,8 +206,6 @@ void HUDLayer::render(SDL_Renderer* renderer, const GameState& state, const Layo
     // Painel principal do HUD (à direita) - elliptical corners in STRETCH mode
     drawRoundedFilled(renderer, x, y, w, h, layout.borderRadiusX, layout.borderRadiusY,
                       themeManager.getTheme().panel_fill_r, themeManager.getTheme().panel_fill_g, themeManager.getTheme().panel_fill_b, 255);
-    drawRoundedOutline(renderer, x, y, w, h, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
-                       themeManager.getTheme().panel_outline_r, themeManager.getTheme().panel_outline_g, themeManager.getTheme().panel_outline_b, themeManager.getTheme().panel_outline_a);
 }
 
 // NextLayer (independent preview box)
@@ -254,9 +246,6 @@ void NextLayer::render(SDL_Renderer* renderer, const GameState& state, const Lay
     drawRoundedFilled(renderer, boxX, boxY, boxW, boxH, layout.borderRadiusX, layout.borderRadiusY,
                       themeManager.getTheme().next_fill_r, themeManager.getTheme().next_fill_g, 
                       themeManager.getTheme().next_fill_b, 255);
-    drawRoundedOutline(renderer, boxX, boxY, boxW, boxH, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
-                       themeManager.getTheme().next_outline_r, themeManager.getTheme().next_outline_g, 
-                       themeManager.getTheme().next_outline_b, themeManager.getTheme().next_outline_a);
     
     // Draw "NEXT" label - text distorts in STRETCH mode
     std::string nextText = "NEXT";
@@ -353,14 +342,9 @@ void PieceStatsLayer::render(SDL_Renderer* renderer, const GameState& state, con
     
     // Desenhar caixa ao redor das estatísticas - elliptical corners in STRETCH mode
     drawRoundedFilled(renderer, statsBoxX, statsBoxY, statsBoxW, statsBoxH, layout.borderRadiusX, layout.borderRadiusY,
-                      themeManager.getTheme().next_fill_r, 
-                      themeManager.getTheme().next_fill_g, 
-                      themeManager.getTheme().next_fill_b, 255);
-    drawRoundedOutline(renderer, statsBoxX, statsBoxY, statsBoxW, statsBoxH, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
-                       themeManager.getTheme().next_outline_r, 
-                       themeManager.getTheme().next_outline_g, 
-                       themeManager.getTheme().next_outline_b, 
-                       themeManager.getTheme().next_outline_a);
+                      themeManager.getTheme().stats_fill_r, 
+                      themeManager.getTheme().stats_fill_g, 
+                      themeManager.getTheme().stats_fill_b, 255);
     
     // Renderizar estatísticas de cada peça (sem título, peças centralizadas)
     int statY = statsBoxY + statsPad;
@@ -453,9 +437,6 @@ void ScoreLayer::render(SDL_Renderer* renderer, const GameState& state, const La
     drawRoundedFilled(renderer, boxX, boxY, boxW, boxH, layout.borderRadiusX, layout.borderRadiusY,
                       themeManager.getTheme().score_fill_r, themeManager.getTheme().score_fill_g, 
                       themeManager.getTheme().score_fill_b, 255);
-    drawRoundedOutline(renderer, boxX, boxY, boxW, boxH, layout.borderRadiusX, layout.borderRadiusY, layout.borderThickness,
-                       themeManager.getTheme().score_outline_r, themeManager.getTheme().score_outline_g, 
-                       themeManager.getTheme().score_outline_b, themeManager.getTheme().score_outline_a);
     
     // Same top margin as NEXT (pad*2 for consistency)
     int pad = scaleOffsetY(10, layout);
@@ -530,6 +511,14 @@ void OverlayLayer::render(SDL_Renderer* renderer, const GameState& state, const 
         // Elliptical corners in STRETCH mode - calculate from virtual 14 radius
         int overlayRadX = scaleOffsetX(14, layout);
         int overlayRadY = scaleOffsetY(14, layout);
+        
+        // DEBUG: Log colors being used for overlay rendering
+        std::stringstream debugOverlay;
+        debugOverlay << "OverlayLayer rendering - fill: #" 
+                     << std::hex << std::setfill('0') << std::setw(2) << (int)themeManager.getTheme().overlay_fill_r
+                     << std::setw(2) << (int)themeManager.getTheme().overlay_fill_g
+                     << std::setw(2) << (int)themeManager.getTheme().overlay_fill_b;
+        
         drawRoundedFilled(renderer, ox, oy, ow, oh, overlayRadX, overlayRadY, themeManager.getTheme().overlay_fill_r, themeManager.getTheme().overlay_fill_g, themeManager.getTheme().overlay_fill_b, themeManager.getTheme().overlay_fill_a);
         drawRoundedOutline(renderer, ox, oy, ow, oh, overlayRadX, overlayRadY, 2, themeManager.getTheme().overlay_outline_r, themeManager.getTheme().overlay_outline_g, themeManager.getTheme().overlay_outline_b, themeManager.getTheme().overlay_outline_a);
         int txc = ox + (ow - topW) / 2, tyc = oy + padY;
@@ -569,7 +558,7 @@ void PostEffectsLayer::render(SDL_Renderer* renderer, const GameState&, const La
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
         float tsec = SDL_GetTicks() / 1000.0f;
         int bandH = (int)(vis.sweepGBandHPx * layout.scaleY); // Scale sweep band with virtual area
-        if (bandH < 1) { SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE); DebugLogger::info("PostEffectsLayer: skip sweep (bandH<1)"); return; }
+        if (bandH < 1) { SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE); return; }
         if (bandH > virtualAreaH) bandH = virtualAreaH;
         if (bandH > 1024) bandH = 1024; // safety cap to keep frame responsive
         float speed = (float)vis.sweepGSpeedPxps * layout.scaleY; // Scale speed with virtual area

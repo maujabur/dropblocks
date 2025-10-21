@@ -5,6 +5,7 @@
 #include "DebugLogger.hpp"
 #include "ThemeManager.hpp"
 #include "input/KeyboardInput.hpp"
+#include "ConfigManager.hpp"
 #include <SDL2/SDL.h>
 #include "render/RenderManager.hpp"
 #include "render/GameStateBridge.hpp"
@@ -12,7 +13,7 @@
 class GameState; // defined in main TU
 extern ThemeManager themeManager;
 
-void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer* ren) {
+void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer* ren, ConfigManager& configManager) {
     if (running_) { DebugLogger::warning("Game loop is already running"); return; }
     running_ = true;
     LayoutCache layoutCache;
@@ -33,6 +34,9 @@ void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer*
                                layoutCache.offsetX, layoutCache.offsetY,
                                scaleModeStr);
     
+    // Update debug overlay with config file info
+    debugOverlay.setConfigInfo(configManager.getConfigPaths());
+    
     // Pre-render static textures
     textureCache.update(ren, layoutCache, themeManager);
     
@@ -41,6 +45,9 @@ void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer*
     
     while (db_isRunning(state) && running_) {
         if (!ren) { DebugLogger::error("Renderer is null; aborting main loop"); break; }
+        
+        // Garantir que o cursor permaneça oculto
+        SDL_ShowCursor(SDL_DISABLE);
         
         // Measure frame start time
         Uint32 frameStart = SDL_GetTicks();

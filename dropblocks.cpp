@@ -57,9 +57,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "8.1"
-#define DROPBLOCKS_BUILD_INFO "Virtual layout system with independent elements"	
-#define DROPBLOCKS_FEATURES "Layout system with independent elements and virtual coordinates"
+#define DROPBLOCKS_VERSION "8.8"
+#define DROPBLOCKS_BUILD_INFO "Theme System Enhanced + Debug Cleanup"
+#define DROPBLOCKS_FEATURES "Phosphor Green/Amber/Neon themes, Clean UI, Hidden cursor"
 
 // Math constant (if not defined by system)
 #ifndef M_PI
@@ -167,11 +167,9 @@ int main(int, char**) {
     // Initialize game randomizer
     GameInit::initializeRandomizer(state);
     
-    DebugLogger::info("Initialization completed successfully");
-    
     // Run game loop
     GameLoop gameLoop;
-    gameLoop.run(state, renderManager, ren);
+    gameLoop.run(state, renderManager, ren, configManager);
     
     // Cleanup
     GameCleanup cleanup;

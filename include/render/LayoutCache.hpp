@@ -42,7 +42,7 @@ struct LayoutCache {
     
     // Legacy fields (kept for compatibility during transition)
     int CW, CH, CX, CY;
-    int scale, GAP1, GAP2;
+    int scale;
     int bannerW, panelTarget, usableLeftW;
     int cellBoard, GW, GH;
     float cellBoardW, cellBoardH;  // Separate cell dimensions (STRETCH can have W != H)

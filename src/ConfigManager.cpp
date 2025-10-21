@@ -26,12 +26,15 @@ private:
     float parseFloat(const std::string& value) const { return (float)std::atof(value.c_str()); }
     bool parseHexColor(const std::string& value, RGB& color) const {
         std::string hex = value; if (hex.size() && hex[0] == '#') hex = hex.substr(1);
-        if (hex.length() != 6) return false; try {
+        if (hex.length() != 6) return false; 
+        try {
             color.r = (Uint8)std::stoi(hex.substr(0,2), nullptr, 16);
             color.g = (Uint8)std::stoi(hex.substr(2,2), nullptr, 16);
             color.b = (Uint8)std::stoi(hex.substr(4,2), nullptr, 16);
             return true;
-        } catch (...) { return false; }
+        } catch (...) { 
+            return false; 
+        }
     }
 public:
     VisualConfigParser(VisualConfig& config) : config_(config) {}
@@ -140,6 +143,12 @@ bool VisualConfigParser::parse(const std::string& key, const std::string& value)
     if (key == "HUD_SCORE") return parseHexColor(value, config_.colors.hudScore);
     if (key == "HUD_LINES") return parseHexColor(value, config_.colors.hudLines);
     if (key == "HUD_LEVEL") return parseHexColor(value, config_.colors.hudLevel);
+    
+    // SCORE
+    if (key == "SCORE_FILL") return parseHexColor(value, config_.colors.scoreFill);
+    if (key == "SCORE_OUTLINE") return parseHexColor(value, config_.colors.scoreOutline);
+    if (key == "SCORE_OUTLINE_A") { config_.colors.scoreOutlineAlpha = (unsigned char)parseInt(value); return true; }
+    
     if (key == "NEXT_FILL") return parseHexColor(value, config_.colors.nextFill);
     if (key == "NEXT_OUTLINE") return parseHexColor(value, config_.colors.nextOutline);
     if (key == "NEXT_OUTLINE_A") { config_.colors.nextOutlineAlpha = (unsigned char)parseInt(value); return true; }
@@ -153,6 +162,14 @@ bool VisualConfigParser::parse(const std::string& key, const std::string& value)
     if (key == "OVERLAY_OUTLINE_A") { config_.colors.overlayOutlineAlpha = (unsigned char)parseInt(value); return true; }
     if (key == "OVERLAY_TOP") return parseHexColor(value, config_.colors.overlayTop);
     if (key == "OVERLAY_SUB") return parseHexColor(value, config_.colors.overlaySub);
+    
+    // Statistics
+    if (key == "STATS_FILL") return parseHexColor(value, config_.colors.statsFill);
+    if (key == "STATS_OUTLINE") return parseHexColor(value, config_.colors.statsOutline);
+    if (key == "STATS_OUTLINE_A") { config_.colors.statsOutlineAlpha = (unsigned char)parseInt(value); return true; }
+    if (key == "STATS_LABEL") return parseHexColor(value, config_.colors.statsLabel);
+    if (key == "STATS_COUNT") return parseHexColor(value, config_.colors.statsCount);
+    
     if (key == "ENABLE_BANNER_SWEEP") { config_.effects.bannerSweep = parseBool(value); return true; }
     if (key == "ENABLE_GLOBAL_SWEEP") { config_.effects.globalSweep = parseBool(value); return true; }
     if (key == "SWEEP_SPEED_PXPS") { config_.effects.sweepSpeedPxps = parseFloat(value); return true; }
@@ -166,8 +183,6 @@ bool VisualConfigParser::parse(const std::string& key, const std::string& value)
     if (key == "SCANLINE_ALPHA") { config_.effects.scanlineAlpha = parseInt(value); return true; }
     if (key == "ROUNDED_PANELS") { config_.layout.roundedPanels = parseInt(value); return true; }
     if (key == "HUD_FIXED_SCALE") { config_.layout.hudFixedScale = parseInt(value); return true; }
-    if (key == "GAP1_SCALE") { config_.layout.gap1Scale = parseInt(value); return true; }
-    if (key == "GAP2_SCALE") { config_.layout.gap2Scale = parseInt(value); return true; }
     if (key == "TITLE_TEXT") { config_.titleText = value; return true; }
     return false;
 }
@@ -179,7 +194,6 @@ bool VisualConfigParser::validate() const {
     if (config_.effects.sweepSoftness < 0.0f || config_.effects.sweepSoftness > 1.0f) return false;
     if (config_.effects.sweepGSoftness < 0.0f || config_.effects.sweepGSoftness > 1.0f) return false;
     if (config_.layout.roundedPanels < 0) return false; if (config_.layout.hudFixedScale < 1) return false;
-    if (config_.layout.gap1Scale < 0) return false; if (config_.layout.gap2Scale < 0) return false;
     return true;
 }
 
@@ -213,7 +227,7 @@ bool InputConfigParser::parse(const std::string& key, const std::string& value) 
     if (key == "JOYSTICK_ANALOG_SENSITIVITY") { config_.analogSensitivity = parseFloat(value); return true; }
     if (key == "JOYSTICK_INVERT_Y_AXIS") { config_.invertYAxis = parseBool(value); return true; }
     if (key == "JOYSTICK_MOVE_REPEAT_DELAY") { config_.moveRepeatDelay = (unsigned int)parseInt(value); return true; }
-    if (key == "JOYSTICK_SOFT_DROP_REPEAT_DELAY") { config_.softDropRepeatDelay = (unsigned int)parseInt(value); return true; }
+    if (key == "JOYSTICK_SOFT_DROP_REPEAT_DELAY" || key == "JOYSTICK_SOFT_DROP_DELAY") { config_.softDropRepeatDelay = (unsigned int)parseInt(value); return true; }
     return false;
 }
 
@@ -236,9 +250,9 @@ bool PiecesConfigParser::parse(const std::string& key, const std::string& value)
 
 // ---- GameConfigParser impl ----
 bool GameConfigParser::parse(const std::string& key, const std::string& value) {
-    if (key == "TICK_MS_START") { config_.tickMsStart = parseInt(value); return true; }
-    if (key == "TICK_MS_MIN") { config_.tickMsMin = parseInt(value); return true; }
-    if (key == "SPEED_ACCELERATION") { config_.speedAcceleration = parseInt(value); return true; }
+    if (key == "TICK_MS_START" || key == "GAME_SPEED_START_MS") { config_.tickMsStart = parseInt(value); return true; }
+    if (key == "TICK_MS_MIN" || key == "GAME_SPEED_MIN_MS") { config_.tickMsMin = parseInt(value); return true; }
+    if (key == "SPEED_ACCELERATION" || key == "GAME_SPEED_ACCELERATION") { config_.speedAcceleration = parseInt(value); return true; }
     if (key == "LEVEL_STEP") { config_.levelStep = parseInt(value); return true; }
     return false;
 }
@@ -334,6 +348,7 @@ static void trim(std::string& s) {
 }
 
 bool ConfigManager::loadFromFile(const std::string& path) {
+    DebugLogger::info("Loading config file: " + path);
     std::ifstream file(path);
     if (!file.good()) { DebugLogger::error("Failed to open config file: " + path); return false; }
     configPaths_.push_back(path);
@@ -347,10 +362,25 @@ bool ConfigManager::loadFromFile(const std::string& path) {
     std::vector<ConfigParser*> parsers = {&visualParser, &audioParser, &inputParser, &piecesParser, &gameParser, &layoutParser};
 
     std::string line; while (std::getline(file, line)) {
-        size_t commentPos = line.find('#'); if (commentPos != std::string::npos) {
-            std::string beforeHash = line.substr(0, commentPos); trim(beforeHash); if (beforeHash.empty()) line = line.substr(0, commentPos);
+        // Remove comments (# preceded by whitespace or at start of line)
+        size_t commentPos = std::string::npos;
+        for (size_t i = 0; i < line.length(); i++) {
+            if (line[i] == '#') {
+                // If # is at start of line or preceded by whitespace, it's a comment
+                if (i == 0 || std::isspace(line[i-1])) {
+                    commentPos = i;
+                    break;
+                }
+            }
         }
-        size_t semiPos = line.find(';'); if (semiPos != std::string::npos) line = line.substr(0, semiPos);
+        if (commentPos != std::string::npos) {
+            line = line.substr(0, commentPos);
+        }
+        
+        // Remove everything after semicolon
+        size_t semiPos = line.find(';'); 
+        if (semiPos != std::string::npos) line = line.substr(0, semiPos);
+        
         trim(line); if (line.empty()) continue;
         size_t eq = line.find('='); if (eq == std::string::npos) continue;
         std::string key = line.substr(0, eq); std::string value = line.substr(eq + 1);

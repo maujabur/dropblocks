@@ -8,47 +8,8 @@
 extern const int COLS;
 extern const int ROWS;
 extern int BORDER;
-extern int GAP1_SCALE;
-extern int GAP2_SCALE;
 extern int HUD_FIXED_SCALE;
 extern LayoutConfig layoutConfig;
-
-// Initialize default layout if not configured
-static void initializeDefaultLayout(LayoutConfig& config) {
-    // Always ensure we have valid virtual dimensions
-    if (config.virtualWidth <= 0) config.virtualWidth = 1920;
-    if (config.virtualHeight <= 0) config.virtualHeight = 1080;
-    
-    // Set defaults for any element that has width == 0 (not configured)
-    if (config.banner.width == 0) {
-        config.banner = {10, 100, 80, 880, {0,40,0}, {0,60,0}, {120,255,120}, 255, 180, true};
-    }
-    
-    if (config.stats.width == 0) {
-        // Enable stats by default if not explicitly configured
-        config.stats = {95, 100, 200, 880, {18,18,26}, {80,80,110}, {220,220,220}, 255, 160, true};
-    }
-    
-    if (config.board.width == 0) {
-        config.board = {300, 100, 600, 880, {0,0,0}, {0,0,0}, {255,255,255}, 255, 255, true};
-    }
-    
-    if (config.hud.width == 0) {
-        config.hud = {920, 100, 500, 880, {24,24,32}, {90,90,120}, {200,200,220}, 255, 200, true};
-    }
-    
-    if (config.next.width == 0) {
-        // Don't set defaults for NEXT - it should be explicitly configured
-        // to be rendered as an independent layer
-        config.next = {0, 0, 0, 0, {18,18,26}, {80,80,110}, {220,220,220}, 255, 160, false};
-    }
-    
-    if (config.score.width == 0) {
-        // Don't set defaults for SCORE - it should be explicitly configured
-        // to be rendered as an independent layer
-        config.score = {0, 0, 0, 0, {18,18,26}, {80,80,110}, {220,220,220}, 255, 160, false};
-    }
-}
 
 void db_layoutCalculate(LayoutCache& layout, SDL_Renderer* renderer) {
     // Use SDL_GetRendererOutputSize to get the actual rendering resolution
@@ -57,9 +18,6 @@ void db_layoutCalculate(LayoutCache& layout, SDL_Renderer* renderer) {
     SDL_GetRendererOutputSize(renderer, &w, &h);
     layout.SWr = w;
     layout.SHr = h;
-    
-    // Initialize default layout if needed
-    initializeDefaultLayout(layoutConfig);
     
     // Setup virtual layout transformer
     VirtualLayout virtualLayout;
@@ -189,9 +147,6 @@ void db_layoutCalculate(LayoutCache& layout, SDL_Renderer* renderer) {
         layout.scaleTextX = layout.scale * uniformScale;
         layout.scaleTextY = layout.scale * uniformScale;
     }
-    
-    layout.GAP1 = BORDER + GAP1_SCALE * layout.scale;
-    layout.GAP2 = BORDER + GAP2_SCALE * layout.scale;
     layout.bannerW = layout.bannerRect.w;
     layout.BX = layout.bannerRect.x;
     layout.BY = layout.bannerRect.y;

@@ -30,7 +30,7 @@ struct ElementLayout {
 
 // Global layout configuration
 struct LayoutConfig {
-    int virtualWidth = 1920;
+    int virtualWidth = 1620;
     int virtualHeight = 1080;
     ScaleMode scaleMode = ScaleMode::AUTO;
     int borderRadius = 10;
@@ -38,13 +38,13 @@ struct LayoutConfig {
     int offsetX = 0;  // Used only in NATIVE mode
     int offsetY = 0;  // Used only in NATIVE mode
     
-    // UI elements (in virtual coordinates)
-    ElementLayout banner;
-    ElementLayout stats;
-    ElementLayout board;  // Container for the game board
-    ElementLayout hud;
-    ElementLayout next;
-    ElementLayout score;
+    // UI elements (in virtual coordinates) - with default positions
+    ElementLayout banner{0, 0, 150, 1080, {0,40,0}, {0,60,0}, {120,255,120}, 255, 180, true};
+    ElementLayout stats{180, 0, 350, 1080, {18,18,26}, {80,80,110}, {220,220,220}, 255, 160, true};
+    ElementLayout board{560, 0, 540, 1080, {0,0,0}, {0,0,0}, {255,255,255}, 255, 255, true};  // Container for the game board
+    ElementLayout hud{1130, 0, 490, 1080, {24,24,32}, {90,90,120}, {200,200,220}, 255, 200, true};
+    ElementLayout next{1245, 550, 260, 300, {18,18,26}, {80,80,110}, {220,220,220}, 255, 160, true};
+    ElementLayout score{1200, 50, 350, 450, {18,18,26}, {80,80,110}, {220,220,220}, 255, 160, true};
 };
 
 struct VisualConfig {
@@ -67,6 +67,11 @@ struct VisualConfig {
         RGB hudLines{180,255,180};
         RGB hudLevel{180,200,255};
 
+        // SCORE
+        RGB scoreFill{18,18,26};
+        RGB scoreOutline{80,80,110};
+        unsigned char scoreOutlineAlpha = 160;
+
         // NEXT
         RGB nextFill{18,18,26};
         RGB nextOutline{80,80,110};
@@ -83,6 +88,13 @@ struct VisualConfig {
         unsigned char overlayOutlineAlpha = 120;
         RGB overlayTop{255,160,160};
         RGB overlaySub{220,220,220};
+
+        // Statistics
+        RGB statsFill{18,18,26};
+        RGB statsOutline{80,80,110};
+        unsigned char statsOutlineAlpha = 160;
+        RGB statsLabel{200,200,220};
+        RGB statsCount{255,255,180};
     } colors;
 
     struct Effects {
@@ -101,12 +113,10 @@ struct VisualConfig {
 
     struct Layout {
         int roundedPanels = 1;
-        int hudFixedScale = 4;
-        int gap1Scale = 10;
-        int gap2Scale = 10;
+        int hudFixedScale = 6;
     } layout;
 
-    std::string titleText = "---H A C K T R I S";
+    std::string titleText = "__H A C K T R I S";
 };
 
 struct AudioConfig {

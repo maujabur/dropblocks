@@ -3,6 +3,7 @@
 #include <cmath>
 #include <sstream>
 #include <iomanip>
+#include <vector>
 
 void DebugOverlay::update(float deltaMs) {
     // Store frame time sample
@@ -44,10 +45,10 @@ void DebugOverlay::render(SDL_Renderer* renderer, int screenWidth, int screenHei
     int lineHeight = 30;
     int scale = 2;
     
-    // Semi-transparent background (increased height for layout info)
+    // Semi-transparent background (increased height for layout and config info)
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
-    SDL_Rect bg = {x - 10, y - 5, 240, 400};
+    SDL_Rect bg = {x - 10, y - 5, 240, 450};
     SDL_RenderFillRect(renderer, &bg);
     
     // Border
@@ -135,6 +136,14 @@ void DebugOverlay::render(SDL_Renderer* renderer, int screenWidth, int screenHei
         y += lineHeight;
     }
     
+    // Configuration info
+    y += 5; // Small gap
+    drawPixelText(renderer, x, y, "CONFIG:", scale, 255, 200, 100);
+    y += lineHeight;
+    
+    drawPixelText(renderer, x, y, configFiles_, scale, 200, 200, 200);
+    y += lineHeight;
+    
     // Custom values
     if (!customName1_.empty()) {
         std::string line = customName1_ + ": " + customValue1_;
@@ -173,5 +182,26 @@ void DebugOverlay::setLayoutInfo(int virtualW, int virtualH, int physicalW, int 
     offsetX_ = offsetX;
     offsetY_ = offsetY;
     scaleMode_ = scaleMode;
+}
+
+void DebugOverlay::setConfigInfo(const std::vector<std::string>& configPaths) {
+    if (configPaths.empty()) {
+        configFiles_ = "None";
+        return;
+    }
+    
+    // Extract just the filename from the first path (most recently loaded)
+    std::string firstPath = configPaths.back();  // Last loaded file
+    size_t lastSlash = firstPath.find_last_of("/\\");
+    if (lastSlash != std::string::npos) {
+        configFiles_ = firstPath.substr(lastSlash + 1);
+    } else {
+        configFiles_ = firstPath;
+    }
+    
+    // If multiple files, add count
+    if (configPaths.size() > 1) {
+        configFiles_ += " (+" + std::to_string(configPaths.size() - 1) + ")";
+    }
 }
 

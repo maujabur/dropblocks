@@ -6,12 +6,13 @@
 #include "input/JoystickInput.hpp"
 #include "pieces/Piece.hpp"
 #include "render/GameStateBridge.hpp"
+#include "DebugLogger.hpp"
+#include <sstream>
+#include <iomanip>
 
 // External globals from dropblocks.cpp
 extern int ROUNDED_PANELS;
 extern int HUD_FIXED_SCALE;
-extern int GAP1_SCALE;
-extern int GAP2_SCALE;
 extern std::string TITLE_TEXT;
 extern int SPEED_ACCELERATION;
 extern int LEVEL_STEP;
@@ -35,6 +36,22 @@ void applyConfigToAudio(AudioSystem& audio, const AudioConfig& config) {
 }
 
 void applyConfigToTheme(const VisualConfig& config, ThemeManager& themeManager, VisualEffectsView& visualView) {
+    // Debug: Log colors being applied
+    std::stringstream ss;
+    ss << "Applying theme colors - Background: #" 
+       << std::hex << std::setfill('0') << std::setw(2) << (int)config.colors.background.r
+       << std::setw(2) << (int)config.colors.background.g 
+       << std::setw(2) << (int)config.colors.background.b
+       << ", Panel Fill: #"
+       << std::setw(2) << (int)config.colors.panelFill.r
+       << std::setw(2) << (int)config.colors.panelFill.g
+       << std::setw(2) << (int)config.colors.panelFill.b
+       << ", Banner: #"
+       << std::setw(2) << (int)config.colors.bannerBg.r
+       << std::setw(2) << (int)config.colors.bannerBg.g
+       << std::setw(2) << (int)config.colors.bannerBg.b;
+    DebugLogger::info(ss.str());
+
     // Apply colors
     themeManager.getTheme().bg_r = config.colors.background.r;
     themeManager.getTheme().bg_g = config.colors.background.g;
@@ -51,7 +68,6 @@ void applyConfigToTheme(const VisualConfig& config, ThemeManager& themeManager, 
     themeManager.getTheme().panel_outline_r = config.colors.panelOutline.r;
     themeManager.getTheme().panel_outline_g = config.colors.panelOutline.g;
     themeManager.getTheme().panel_outline_b = config.colors.panelOutline.b;
-    themeManager.getTheme().panel_outline_a = config.colors.panelOutlineAlpha;
     
     // Banner
     themeManager.getTheme().banner_bg_r = config.colors.bannerBg.r;
@@ -61,7 +77,6 @@ void applyConfigToTheme(const VisualConfig& config, ThemeManager& themeManager, 
     themeManager.getTheme().banner_outline_r = config.colors.bannerOutline.r;
     themeManager.getTheme().banner_outline_g = config.colors.bannerOutline.g;
     themeManager.getTheme().banner_outline_b = config.colors.bannerOutline.b;
-    themeManager.getTheme().banner_outline_a = config.colors.bannerOutlineAlpha;
     
     themeManager.getTheme().banner_text_r = config.colors.bannerText.r;
     themeManager.getTheme().banner_text_g = config.colors.bannerText.g;
@@ -84,6 +99,15 @@ void applyConfigToTheme(const VisualConfig& config, ThemeManager& themeManager, 
     themeManager.getTheme().hud_level_g = config.colors.hudLevel.g;
     themeManager.getTheme().hud_level_b = config.colors.hudLevel.b;
     
+    // SCORE
+    themeManager.getTheme().score_fill_r = config.colors.scoreFill.r;
+    themeManager.getTheme().score_fill_g = config.colors.scoreFill.g;
+    themeManager.getTheme().score_fill_b = config.colors.scoreFill.b;
+    
+    themeManager.getTheme().score_outline_r = config.colors.scoreOutline.r;
+    themeManager.getTheme().score_outline_g = config.colors.scoreOutline.g;
+    themeManager.getTheme().score_outline_b = config.colors.scoreOutline.b;
+    
     // NEXT
     themeManager.getTheme().next_fill_r = config.colors.nextFill.r;
     themeManager.getTheme().next_fill_g = config.colors.nextFill.g;
@@ -92,7 +116,6 @@ void applyConfigToTheme(const VisualConfig& config, ThemeManager& themeManager, 
     themeManager.getTheme().next_outline_r = config.colors.nextOutline.r;
     themeManager.getTheme().next_outline_g = config.colors.nextOutline.g;
     themeManager.getTheme().next_outline_b = config.colors.nextOutline.b;
-    themeManager.getTheme().next_outline_a = config.colors.nextOutlineAlpha;
     
     themeManager.getTheme().next_label_r = config.colors.nextLabel.r;
     themeManager.getTheme().next_label_g = config.colors.nextLabel.g;
@@ -126,6 +149,23 @@ void applyConfigToTheme(const VisualConfig& config, ThemeManager& themeManager, 
     themeManager.getTheme().overlay_sub_g = config.colors.overlaySub.g;
     themeManager.getTheme().overlay_sub_b = config.colors.overlaySub.b;
     
+    // Statistics
+    themeManager.getTheme().stats_fill_r = config.colors.statsFill.r;
+    themeManager.getTheme().stats_fill_g = config.colors.statsFill.g;
+    themeManager.getTheme().stats_fill_b = config.colors.statsFill.b;
+    
+    themeManager.getTheme().stats_outline_r = config.colors.statsOutline.r;
+    themeManager.getTheme().stats_outline_g = config.colors.statsOutline.g;
+    themeManager.getTheme().stats_outline_b = config.colors.statsOutline.b;
+    
+    themeManager.getTheme().stats_label_r = config.colors.statsLabel.r;
+    themeManager.getTheme().stats_label_g = config.colors.statsLabel.g;
+    themeManager.getTheme().stats_label_b = config.colors.statsLabel.b;
+    
+    themeManager.getTheme().stats_count_r = config.colors.statsCount.r;
+    themeManager.getTheme().stats_count_g = config.colors.statsCount.g;
+    themeManager.getTheme().stats_count_b = config.colors.statsCount.b;
+    
     // Apply effects
     // Visual effects now flow via g_visualView and bridge only
     visualView.bannerSweep = config.effects.bannerSweep;
@@ -143,8 +183,6 @@ void applyConfigToTheme(const VisualConfig& config, ThemeManager& themeManager, 
     // Apply layout
     ROUNDED_PANELS = config.layout.roundedPanels;
     HUD_FIXED_SCALE = config.layout.hudFixedScale;
-    GAP1_SCALE = config.layout.gap1Scale;
-    GAP2_SCALE = config.layout.gap2Scale;
     
     // Apply text
     TITLE_TEXT = config.titleText;
