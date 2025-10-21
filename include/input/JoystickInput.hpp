@@ -28,6 +28,7 @@ public:
     bool shouldForceRestart() override;
     bool shouldQuit() override;
     bool shouldScreenshot() override;
+    bool shouldToggleDebug() override;
     
     void update() override;
     bool isConnected() override;

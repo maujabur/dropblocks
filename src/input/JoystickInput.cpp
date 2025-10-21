@@ -50,6 +50,10 @@ bool JoystickInput::shouldScreenshot() {
     return false; // Screenshot not supported on joystick
 }
 
+bool JoystickInput::shouldToggleDebug() {
+    return false; // Debug toggle not supported on joystick (keyboard only)
+}
+
 void JoystickInput::update() {
     if (joystickSystem_) {
         joystickSystem_->update();

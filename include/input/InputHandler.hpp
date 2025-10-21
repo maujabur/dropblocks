@@ -19,6 +19,7 @@ public:
     virtual bool shouldForceRestart() = 0;  // Restart even before game over
     virtual bool shouldQuit() = 0;
     virtual bool shouldScreenshot() = 0;
+    virtual bool shouldToggleDebug() = 0;
 
     virtual void update() = 0;
     virtual bool isConnected() = 0;

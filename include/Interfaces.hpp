@@ -76,6 +76,7 @@ public:
     virtual bool shouldForceRestart() = 0;
     virtual bool shouldQuit() = 0;
     virtual bool shouldScreenshot() = 0;
+    virtual bool shouldToggleDebug() = 0;
     // System methods
     virtual void update() = 0;
     virtual void resetTimers() = 0;

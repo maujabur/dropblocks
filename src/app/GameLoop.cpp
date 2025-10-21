@@ -5,6 +5,7 @@
 #include "DebugLogger.hpp"
 #include "ThemeManager.hpp"
 #include "input/KeyboardInput.hpp"
+#include "input/InputManager.hpp"
 #include "ConfigManager.hpp"
 #include <SDL2/SDL.h>
 #include "render/RenderManager.hpp"
@@ -75,6 +76,12 @@ void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer*
         }
         
         db_update(state, ren);
+        
+        // Check for debug toggle input
+        if (inputManager.shouldToggleDebug()) {
+            debugOverlay.toggle();
+        }
+        
         db_render(state, renderManager, layoutCache);
         
         // Render debug overlay
