@@ -219,13 +219,11 @@ void GameState::handleInput(SDL_Renderer* renderer) {
         if (input_->shouldMoveLeft() && !coll(-1, 0, 0)) {
             activePiece_.x--;
             audio_->playMovementSound();
-            input_->resetTimers();
         }
         
         if (input_->shouldMoveRight() && !coll(1, 0, 0)) {
             activePiece_.x++;
             audio_->playMovementSound();
-            input_->resetTimers();
         }
         
         if (input_->shouldSoftDrop()) {
@@ -238,19 +236,16 @@ void GameState::handleInput(SDL_Renderer* renderer) {
             for (int i = 0; i < maxSteps && !coll(0, 1, 0); i++) { activePiece_.y++; }
             audio_->playHardDropSound();
             updatePiece();
-            input_->resetTimers();
         }
         
         if (input_->shouldRotateCCW()) {
             rotateWithKicks(activePiece_, board_.getGrid(), -1, static_cast<AudioSystem&>(*audio_));
             audio_->playRotationSound(false);
-            input_->resetTimers();
         }
         
         if (input_->shouldRotateCW()) {
             rotateWithKicks(activePiece_, board_.getGrid(), +1, static_cast<AudioSystem&>(*audio_));
             audio_->playRotationSound(true);
-            input_->resetTimers();
         }
     }
 }

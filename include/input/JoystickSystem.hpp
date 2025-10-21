@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include <string>
 #include <memory>
+#include "InputTimingManager.hpp"
 
 /**
  * @brief Joystick device management
@@ -57,7 +58,7 @@ public:
     float analogSensitivity = 1.0f;  // Sensibilidade do analógico
     bool invertYAxis = false;        // Inverter eixo Y (padrão: false)
     
-    // Timing settings (matching keyboard DAS/ARR system)
+    // Timing settings (unified with InputTimingManager)
     Uint32 moveRepeatDelayDAS = 170;     // DAS: Delayed Auto Shift (initial delay)
     Uint32 moveRepeatDelayARR = 50;      // ARR: Auto Repeat Rate (repeat interval)
     Uint32 softDropRepeatDelay = 100;    // ms entre soft drops repetidos
@@ -67,12 +68,21 @@ public:
                          int softDrop, int hardDrop, int pause, int start, int quit);
     void setAnalogSettings(float deadzone, float sensitivity, bool invertY);
     void setTiming(Uint32 moveDelayDAS, Uint32 moveDelayARR, Uint32 softDropDelay);
+    
+    // Get timing configuration for InputTimingManager
+    InputTimingManager::TimingConfig getTimingConfig() const {
+        InputTimingManager::TimingConfig config;
+        config.DAS = moveRepeatDelayDAS;
+        config.ARR = moveRepeatDelayARR;
+        config.softDropDelay = softDropRepeatDelay;
+        return config;
+    }
 };
 
 /**
  * @brief Joystick state management
  * 
- * Tracks current state of buttons and analog inputs
+ * Tracks current state of buttons and analog inputs (simplified - timing handled by InputTimingManager)
  */
 class JoystickState {
 public:
@@ -90,36 +100,34 @@ public:
     float lastLeftStickX = 0.0f;
     float lastLeftStickY = 0.0f;
     
-    // Timers for DAS/ARR system (matching keyboard)
-    Uint32 lastMoveTime = 0;
-    Uint32 lastSoftDropTime = 0;
-    Uint32 leftPressTime = 0;     // When left movement started
-    Uint32 rightPressTime = 0;    // When right movement started
-    Uint32 downPressTime = 0;     // When down movement started
-    
     // State management
     void updateButtonStates(const JoystickDevice& device, const JoystickConfig& config);
     bool isButtonPressed(int button) const;
-    void resetTimers();
     
-    // DAS/ARR timing functions (matching keyboard implementation)
-    bool shouldMoveHorizontalAnalog(float analogValue, Uint32& pressTime, const JoystickConfig& config, bool positive);
-    bool shouldMoveVerticalAnalog(float analogValue, Uint32& pressTime, const JoystickConfig& config, bool positive);
-    
-    // Analog press detection (for rotation)
+    // Analog press detection (for rotation - single press only)
     bool isAnalogPressed(float currentValue, float lastValue, float deadzone, bool checkNegative) const;
 };
 
 /**
  * @brief Joystick input processor
  * 
- * Processes joystick input and converts to game actions
+ * Processes joystick input and converts to game actions using unified timing system
  */
 class JoystickInputProcessor {
 private:
     const JoystickConfig& config_;
     const JoystickState& state_;
     const JoystickDevice& device_;
+    
+    // Unified timing manager (replaces duplicated DAS/ARR logic)
+    mutable InputTimingManager timingManager_;
+    
+    // Timers for single-press actions
+    mutable InputTimingManager::DirectionTimer rotateCCWTimer_;
+    mutable InputTimingManager::DirectionTimer rotateCWTimer_;
+    mutable InputTimingManager::DirectionTimer hardDropTimer_;
+    mutable InputTimingManager::DirectionTimer pauseTimer_;
+    mutable InputTimingManager::DirectionTimer restartTimer_;
     
 public:
     JoystickInputProcessor(const JoystickConfig& config, const JoystickState& state, const JoystickDevice& device);
@@ -134,6 +142,9 @@ public:
     bool shouldRestart() const;
     bool shouldQuit() const;
     bool shouldScreenshot() const;
+    
+    // Access to timing manager for configuration
+    InputTimingManager& getTimingManager() const { return timingManager_; }
 };
 
 /**
@@ -179,7 +190,10 @@ public:
     // Connection status
     bool isConnected() const;
     
-    // Timer management
+    // Timer management (unified)
     void resetTimers();
+    
+    // Access to timing manager for configuration
+    InputTimingManager& getTimingManager() const;
 };
 

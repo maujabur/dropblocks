@@ -13,7 +13,7 @@
 class GameState; // defined in main TU
 extern ThemeManager themeManager;
 
-void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer* ren, ConfigManager& configManager) {
+void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer* ren, ConfigManager& configManager, InputManager& inputManager) {
     if (running_) { DebugLogger::warning("Game loop is already running"); return; }
     running_ = true;
     LayoutCache layoutCache;
@@ -52,15 +52,7 @@ void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer*
         // Measure frame start time
         Uint32 frameStart = SDL_GetTicks();
         
-        // Check for debug toggle (before state.update() to avoid consuming the key)
-        const Uint8* keyState = SDL_GetKeyboardState(nullptr);
-        static bool lastDKeyState = false;
-        bool currentDKeyState = keyState[SDL_SCANCODE_D];
-        if (currentDKeyState && !lastDKeyState) {
-            debugOverlay.toggle();
-            DebugLogger::info(debugOverlay.isEnabled() ? "Debug overlay enabled" : "Debug overlay disabled");
-        }
-        lastDKeyState = currentDKeyState;
+        // Debug toggle is now handled by InputManager in state.update()
         
         // Only recalculate layout if window size changed
         int currentWidth, currentHeight;

@@ -57,9 +57,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "9.0"
-#define DROPBLOCKS_BUILD_INFO "Complete Joystick Analog & DAS/ARR System"
-#define DROPBLOCKS_FEATURES "Complete Joystick Support + DAS/ARR, 4 Retro Themes, Clean UI"
+#define DROPBLOCKS_VERSION "9.1"
+#define DROPBLOCKS_BUILD_INFO "Unified DAS/ARR System - Complete Input Timing Unification"
+#define DROPBLOCKS_FEATURES "Unified Input Timing, Complete Joystick Support, 4 Retro Themes, Clean UI"
 
 // Math constant (if not defined by system)
 #ifndef M_PI
@@ -169,7 +169,7 @@ int main(int, char**) {
     
     // Run game loop
     GameLoop gameLoop;
-    gameLoop.run(state, renderManager, ren, configManager);
+    gameLoop.run(state, renderManager, ren, configManager, inputManager);
     
     // Cleanup
     GameCleanup cleanup;

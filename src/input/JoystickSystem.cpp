@@ -136,68 +136,7 @@ bool JoystickState::isButtonPressed(int button) const {
     return buttonStates[button] && !lastButtonStates[button];
 }
 
-void JoystickState::resetTimers() {
-    lastMoveTime = SDL_GetTicks();
-    leftPressTime = 0;
-    rightPressTime = 0;
-    downPressTime = 0;
-}
-
-// DAS/ARR timing functions (matching keyboard implementation)
-bool JoystickState::shouldMoveHorizontalAnalog(float analogValue, Uint32& pressTime, const JoystickConfig& config, bool positive) {
-    Uint32 now = SDL_GetTicks();
-    bool isActive = positive ? (analogValue > config.analogDeadzone) : (analogValue < -config.analogDeadzone);
-    
-    if (!isActive) {
-        pressTime = 0;
-        return false;
-    }
-    
-    // Just pressed (first time active)
-    if (pressTime == 0) {
-        pressTime = now;
-        lastMoveTime = now;
-        return true;
-    }
-    
-    // Held down - check DAS then ARR
-    Uint32 heldTime = now - pressTime;
-    
-    // After DAS delay, use ARR for continuous movement
-    if (heldTime > config.moveRepeatDelayDAS && (now - lastMoveTime) > config.moveRepeatDelayARR) {
-        lastMoveTime = now;
-        return true;
-    }
-    
-    return false;
-}
-
-bool JoystickState::shouldMoveVerticalAnalog(float analogValue, Uint32& pressTime, const JoystickConfig& config, bool positive) {
-    Uint32 now = SDL_GetTicks();
-    bool isActive = positive ? (analogValue > config.analogDeadzone) : (analogValue < -config.analogDeadzone);
-    
-    if (!isActive) {
-        pressTime = 0;
-        return false;
-    }
-    
-    // Just pressed (first time active)
-    if (pressTime == 0) {
-        pressTime = now;
-        lastSoftDropTime = now;
-        return true;
-    }
-    
-    // Held down - use soft drop delay
-    if ((now - lastSoftDropTime) > config.softDropRepeatDelay) {
-        lastSoftDropTime = now;
-        return true;
-    }
-    
-    return false;
-}
-
-// Analog press detection (for rotation)
+// Analog press detection (for rotation - single press only)
 bool JoystickState::isAnalogPressed(float currentValue, float lastValue, float deadzone, bool checkNegative) const {
     if (checkNegative) {
         // Check if moved from not-pressed to pressed in negative direction
@@ -213,7 +152,8 @@ bool JoystickState::isAnalogPressed(float currentValue, float lastValue, float d
 // ===========================
 
 JoystickInputProcessor::JoystickInputProcessor(const JoystickConfig& config, const JoystickState& state, const JoystickDevice& device)
-    : config_(config), state_(state), device_(device) {}
+    : config_(config), state_(state), device_(device), timingManager_(config.getTimingConfig()) {
+}
 
 bool JoystickInputProcessor::shouldMoveLeft() const {
     // Button press (instant response)
@@ -222,9 +162,9 @@ bool JoystickInputProcessor::shouldMoveLeft() const {
     
     if (buttonPressed) return true;
     
-    // Analog stick with DAS/ARR timing (need to cast away const to update timers)
-    JoystickState& mutableState = const_cast<JoystickState&>(state_);
-    return mutableState.shouldMoveHorizontalAnalog(state_.leftStickX, mutableState.leftPressTime, config_, false);
+    // Analog stick with unified DAS/ARR timing
+    bool analogActive = (state_.leftStickX < -config_.analogDeadzone);
+    return timingManager_.shouldTriggerHorizontal(analogActive, true);
 }
 
 bool JoystickInputProcessor::shouldMoveRight() const {
@@ -234,9 +174,9 @@ bool JoystickInputProcessor::shouldMoveRight() const {
     
     if (buttonPressed) return true;
     
-    // Analog stick with DAS/ARR timing (need to cast away const to update timers)
-    JoystickState& mutableState = const_cast<JoystickState&>(state_);
-    return mutableState.shouldMoveHorizontalAnalog(state_.leftStickX, mutableState.rightPressTime, config_, true);
+    // Analog stick with unified DAS/ARR timing
+    bool analogActive = (state_.leftStickX > config_.analogDeadzone);
+    return timingManager_.shouldTriggerHorizontal(analogActive, false);
 }
 
 bool JoystickInputProcessor::shouldSoftDrop() const {
@@ -246,13 +186,14 @@ bool JoystickInputProcessor::shouldSoftDrop() const {
     
     if (buttonPressed) return true;
     
-    // Analog stick with soft drop timing (need to cast away const to update timers)
-    JoystickState& mutableState = const_cast<JoystickState&>(state_);
-    return mutableState.shouldMoveVerticalAnalog(state_.leftStickY, mutableState.downPressTime, config_, true);
+    // Analog stick with unified vertical timing
+    bool analogActive = (state_.leftStickY > config_.analogDeadzone);
+    return timingManager_.shouldTriggerVertical(analogActive);
 }
 
 bool JoystickInputProcessor::shouldHardDrop() const {
-    return state_.isButtonPressed(config_.buttonHardDrop);
+    bool buttonPressed = state_.isButtonPressed(config_.buttonHardDrop);
+    return timingManager_.shouldTriggerOnce(buttonPressed, hardDropTimer_);
 }
 
 bool JoystickInputProcessor::shouldRotateCCW() const {
@@ -261,25 +202,27 @@ bool JoystickInputProcessor::shouldRotateCCW() const {
                         state_.isButtonPressed(config_.buttonUp) ||
                         (device_.getController() && SDL_GameControllerGetButton(device_.getController(), SDL_CONTROLLER_BUTTON_DPAD_UP));
     
-    if (buttonPressed) return true;
-    
-    // Analog stick UP - only on "press", not hold (like rotation buttons)
+    // Analog stick UP press (single press only)
     bool analogUpPressed = state_.isAnalogPressed(state_.leftStickY, state_.lastLeftStickY, config_.analogDeadzone, true);
     
-    return analogUpPressed;
+    bool isActive = buttonPressed || analogUpPressed;
+    return timingManager_.shouldTriggerOnce(isActive, rotateCCWTimer_);
 }
 
 bool JoystickInputProcessor::shouldRotateCW() const {
-    return state_.isButtonPressed(config_.buttonRotateCW) || 
-           (state_.rightStickX > config_.analogDeadzone);
+    bool buttonPressed = state_.isButtonPressed(config_.buttonRotateCW) || 
+                        (state_.rightStickX > config_.analogDeadzone);
+    return timingManager_.shouldTriggerOnce(buttonPressed, rotateCWTimer_);
 }
 
 bool JoystickInputProcessor::shouldPause() const {
-    return state_.isButtonPressed(config_.buttonPause);
+    bool buttonPressed = state_.isButtonPressed(config_.buttonPause);
+    return timingManager_.shouldTriggerOnce(buttonPressed, pauseTimer_);
 }
 
 bool JoystickInputProcessor::shouldRestart() const {
-    return state_.isButtonPressed(config_.buttonStart);
+    bool buttonPressed = state_.isButtonPressed(config_.buttonStart);
+    return timingManager_.shouldTriggerOnce(buttonPressed, restartTimer_);
 }
 
 bool JoystickInputProcessor::shouldQuit() const {
@@ -328,6 +271,11 @@ bool JoystickSystem::isConnected() const {
 }
 
 void JoystickSystem::resetTimers() { 
-    state_.resetTimers(); 
+    processor_->getTimingManager().resetAllTimers(); 
+}
+
+// Access to timing manager for configuration
+InputTimingManager& JoystickSystem::getTimingManager() const {
+    return processor_->getTimingManager();
 }
 

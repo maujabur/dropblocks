@@ -2,67 +2,100 @@
 
 #include <SDL2/SDL.h>
 #include "InputHandler.hpp"
+#include "InputTimingManager.hpp"
 
 class KeyboardInput : public InputHandler {
 private:
+    // Clean key states (no OS auto-repeat)
     bool keyStates[SDL_NUM_SCANCODES] = {false};
-    bool lastKeyStates[SDL_NUM_SCANCODES] = {false};
-    Uint32 lastMoveTime = 0;
-    Uint32 leftPressTime = 0;
-    Uint32 rightPressTime = 0;
-    Uint32 moveRepeatDelayDAS = 170;  // DAS: Delayed Auto Shift (initial delay)
-    Uint32 moveRepeatDelayARR = 50;   // ARR: Auto Repeat Rate (repeat interval)
-
-    bool isKeyPressed(SDL_Scancode key) {
-        return keyStates[key] && !lastKeyStates[key];
-    }
     
-    bool shouldMoveHorizontal(SDL_Scancode key, Uint32& pressTime) {
-        Uint32 now = SDL_GetTicks();
-        
-        // Just pressed
-        if (isKeyPressed(key)) {
-            pressTime = now;
-            lastMoveTime = now;
-            return true;
-        }
-        
-        // Held down - check DAS then ARR
-        if (keyStates[key]) {
-            Uint32 heldTime = now - pressTime;
-            
-            // After DAS delay, use ARR for continuous movement
-            if (heldTime > moveRepeatDelayDAS && (now - lastMoveTime) > moveRepeatDelayARR) {
-                lastMoveTime = now;
-                return true;
-            }
-        }
-        
-        return false;
+    // Unified timing manager (same as joystick for uniformity)
+    InputTimingManager timingManager_;
+    
+    // Timers for single-press actions
+    InputTimingManager::DirectionTimer rotateCCWTimer_;
+    InputTimingManager::DirectionTimer rotateCWTimer_;
+    InputTimingManager::DirectionTimer hardDropTimer_;
+    InputTimingManager::DirectionTimer pauseTimer_;
+    InputTimingManager::DirectionTimer restartTimer_;
+    InputTimingManager::DirectionTimer forceRestartTimer_;
+    InputTimingManager::DirectionTimer quitTimer_;
+    InputTimingManager::DirectionTimer screenshotTimer_;
+    InputTimingManager::DirectionTimer debugTimer_;
+
+    bool isKeyActive(SDL_Scancode key) {
+        return keyStates[key];
     }
 
 public:
-    bool shouldMoveLeft() override { return shouldMoveHorizontal(SDL_SCANCODE_LEFT, leftPressTime); }
-    bool shouldMoveRight() override { return shouldMoveHorizontal(SDL_SCANCODE_RIGHT, rightPressTime); }
-    bool shouldSoftDrop() override { return isKeyPressed(SDL_SCANCODE_DOWN); }
-    bool shouldHardDrop() override { return isKeyPressed(SDL_SCANCODE_SPACE); }
-    bool shouldRotateCCW() override { return isKeyPressed(SDL_SCANCODE_Z) || isKeyPressed(SDL_SCANCODE_UP); }
-    bool shouldRotateCW() override { return isKeyPressed(SDL_SCANCODE_X); }
-    bool shouldPause() override { return isKeyPressed(SDL_SCANCODE_P); }
-    bool shouldRestart() override { return isKeyPressed(SDL_SCANCODE_RETURN); }
-    bool shouldForceRestart() override { return isKeyPressed(SDL_SCANCODE_R); }
-    bool shouldQuit() override { return isKeyPressed(SDL_SCANCODE_ESCAPE); }
-    bool shouldScreenshot() override { return isKeyPressed(SDL_SCANCODE_F12); }
-    bool shouldToggleDebug() { return isKeyPressed(SDL_SCANCODE_D); }
-
-    void update() override {
-        for (int i = 0; i < SDL_NUM_SCANCODES; i++) {
-            lastKeyStates[i] = keyStates[i];
-            keyStates[i] = SDL_GetKeyboardState(nullptr)[i];
-        }
+    // Movement with DAS/ARR (uniform with joystick)
+    bool shouldMoveLeft() override { 
+        return timingManager_.shouldTriggerHorizontal(isKeyActive(SDL_SCANCODE_LEFT), true); 
     }
+    
+    bool shouldMoveRight() override { 
+        return timingManager_.shouldTriggerHorizontal(isKeyActive(SDL_SCANCODE_RIGHT), false); 
+    }
+    
+    bool shouldSoftDrop() override { 
+        // Soft drop with repeat (uniform with joystick)
+        return timingManager_.shouldTriggerVertical(isKeyActive(SDL_SCANCODE_DOWN)); 
+    }
+    
+    // Single-press actions
+    bool shouldHardDrop() override { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_SPACE), hardDropTimer_); 
+    }
+    
+    bool shouldRotateCCW() override { 
+        bool isActive = isKeyActive(SDL_SCANCODE_Z) || isKeyActive(SDL_SCANCODE_UP);
+        return timingManager_.shouldTriggerOnce(isActive, rotateCCWTimer_); 
+    }
+    
+    bool shouldRotateCW() override { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_X), rotateCWTimer_); 
+    }
+    
+    bool shouldPause() override { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_P), pauseTimer_); 
+    }
+    
+    bool shouldRestart() override { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_RETURN), restartTimer_); 
+    }
+    
+    bool shouldForceRestart() override { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_R), forceRestartTimer_); 
+    }
+    
+    bool shouldQuit() override { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_ESCAPE), quitTimer_); 
+    }
+    
+    bool shouldScreenshot() override { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_F12), screenshotTimer_); 
+    }
+    
+    bool shouldToggleDebug() { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_D), debugTimer_); 
+    }
+
+    // Handle SDL events to get clean key press/release (no OS auto-repeat)
+    void handleKeyEvent(const SDL_KeyboardEvent& event);
+    
+    void update() override {
+        // Update is now handled by SDL events, not polling
+    }
+    
     bool isConnected() override { return true; }
-    void resetTimers() override { lastMoveTime = SDL_GetTicks(); }
+    
+    void resetTimers() override { 
+        timingManager_.resetAllTimers(); 
+    }
+    
+    // Access to timing manager for configuration
+    InputTimingManager& getTimingManager() { return timingManager_; }
+    const InputTimingManager& getTimingManager() const { return timingManager_; }
 };
 
 
