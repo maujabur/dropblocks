@@ -20,6 +20,9 @@ compilation.log
 *.jpg
 dropblocks-screenshot_*
 
+# Exceção: Screenshot oficial do jogo
+!images/screenshot.bmp
+
 # Arquivos temporários
 *.tmp
 *.temp
