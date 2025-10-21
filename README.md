@@ -2,13 +2,17 @@
 
 A modern, customizable falling blocks game inspired by Tetris®, built with C++ and SDL2. Features advanced visual effects, customizable themes, and multiple piece sets.
 
-**Version 7.0** - Phase 7: Unit Tests - Foundational Suite
+**Version 8.8** - Enhanced Theme System + Debug Cleanup
 
 ![DropBlocks Screenshot](images/screenshot.bmp)
 
 ## ✨ Features
 
-- **Modern Visual Effects**: Gaussian sweep effects, scanlines, and smooth animations
+- **Authentic Retro Themes**: Phosphor green, amber CRT monitor themes
+- **Cyberpunk Aesthetics**: Neon-noir theme with vibrant colors
+- **Rainbow Spectrum**: Full spectrum color theme
+- **Clean User Interface**: No debug spam, hidden mouse cursor
+- **Advanced Visual Effects**: Gaussian sweep effects, scanlines, and smooth animations
 - **Customizable Themes**: Full color customization through configuration files
 - **Multiple Piece Sets**: Support for different piece configurations and randomizers
 - **Advanced Audio**: Sound effects with volume control and ambient sounds
@@ -25,7 +29,39 @@ A modern, customizable falling blocks game inspired by Tetris®, built with C++ 
 - **Debugging Tools**: Comprehensive service monitoring and validation
 - **Modular Systems**: Audio, Theme, Pieces, Input, and Config systems
 
-## 🎮 Controls
+## � Themes (v8.8)
+
+DropBlocks now includes authentic retro-inspired themes:
+
+### 🟢 Phosphor Green (`green.cfg`)
+- Classic CRT monitor aesthetic with phosphor P1 green
+- Dark background with bright green text and borders
+- Perfect for that authentic 80s/90s terminal feel
+
+### 🟡 Amber Monitor (`amber.cfg`)
+- Warm amber phosphor display simulation
+- Golden/orange color palette reminiscent of classic workstations
+- Easy on the eyes for extended gaming sessions
+
+### 🌈 Neon Noir (`neon-noir.cfg`)
+- Cyberpunk aesthetic with vibrant neon colors
+- High contrast magenta, cyan, and electric colors
+- Perfect for a futuristic gaming experience
+
+### 🌈 Rainbow Spectrum (`rainbow.cfg`)
+- Full spectrum colors from red to violet
+- Each UI element uses different rainbow colors
+- Vibrant and colorful theme for modern displays
+
+### Usage
+```bash
+./dropblocks green.cfg     # Phosphor green theme
+./dropblocks amber.cfg     # Amber monitor theme  
+./dropblocks neon-noir.cfg # Cyberpunk neon theme
+./dropblocks rainbow.cfg   # Rainbow spectrum theme
+```
+
+## �🎮 Controls
 
 | Key | Action |
 |-----|--------|
@@ -199,7 +235,28 @@ DropBlocks v7.0
 - **Level Progression**: Increasing speed and difficulty
 - **Line Clear Scoring**: Points for single, double, triple, and Tetris clears
 
-## 🔧 Technical Features (v7.0)
+## 🆕 What's New in v8.8
+
+### Theme System Overhaul
+- **Authentic CRT Themes**: Phosphor green and amber monitor simulations
+- **Cyberpunk Aesthetics**: Neon-noir theme with electric colors
+- **Rainbow Spectrum**: Full spectrum color theme
+- **Enhanced Color System**: Improved STATS_FILL and STATS_OUTLINE support
+- **Clean Configuration**: Removed legacy parameters and simplified setup
+
+### User Experience Improvements
+- **Debug Cleanup**: Removed excessive console logging for cleaner experience
+- **Hidden Mouse Cursor**: Automatic cursor hiding during gameplay
+- **Streamlined UI**: Removed problematic border rendering for cleaner visuals
+- **Optimized Rendering**: Enhanced performance with simplified draw calls
+
+### Configuration System
+- **Improved Parsing**: Better comment handling in configuration files
+- **Color Debugging**: Enhanced color identification and validation
+- **Theme Management**: Consolidated theme loading and application
+- **File Organization**: Cleaned up obsolete configuration files
+
+## 🔧 Technical Features (v8.8)
 
 ### Dependency Injection System
 
@@ -335,6 +392,8 @@ RAND_BAG_SIZE = 7
 
 ### Previous Versions
 
+- **v8.8** - Enhanced Theme System + Debug Cleanup (Current)
+- **v7.0** - Phase 7: Unit Tests - Foundational Suite
 - **v6.11** - Dependency Injection Runtime Fix Complete
 - **v6.10** - Abstract Interfaces Implementation Complete
 - **v6.9** - AudioSystem Modular Refactoring Complete
