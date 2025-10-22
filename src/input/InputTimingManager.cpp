@@ -5,9 +5,9 @@
 // ===========================
 
 InputTimingManager::InputTimingManager() {
-    // Conservative timing values for debugging (ensuring uniformity)
-    config_.DAS = 250;  // Delayed Auto Shift (more conservative)
-    config_.ARR = 100;  // Auto Repeat Rate (slower repeat)
+    // Professional timing values for joystick (keyboard uses OS auto-repeat)
+    config_.DAS = 170;  // Delayed Auto Shift
+    config_.ARR = 50;   // Auto Repeat Rate  
     config_.softDropDelay = 100;  // Soft drop timing
 }
 
