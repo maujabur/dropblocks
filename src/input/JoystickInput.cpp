@@ -54,6 +54,10 @@ bool JoystickInput::shouldToggleDebug() {
     return false; // Debug toggle not supported on joystick (keyboard only)
 }
 
+bool JoystickInput::shouldToggleTimer() {
+    return false; // Timer toggle not supported on joystick (keyboard only)
+}
+
 void JoystickInput::update() {
     if (joystickSystem_) {
         joystickSystem_->update();

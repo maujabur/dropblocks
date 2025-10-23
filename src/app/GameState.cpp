@@ -24,6 +24,9 @@ GameState::GameState(DependencyContainer& container)
 {
     // DI constructor stub (container.resolve not implemented here yet)
     lastTick_ = SDL_GetTicks();
+    
+    // Initialize timer with default config
+    timer_ = std::make_unique<TimerSystem>();
 }
 
 GameState::GameState()
@@ -36,6 +39,9 @@ GameState::GameState()
     pieces_ = nullptr;
     input_ = nullptr;
     config_ = nullptr;
+    
+    // Initialize timer with default config
+    timer_ = std::make_unique<TimerSystem>();
 }
 
 void GameState::setDependencies(AudioSystem* audio, ThemeManager* theme, PieceManager* pieces, InputManager* input, ConfigManager* config) {
@@ -64,6 +70,15 @@ const ComboSystem& GameState::getCombo() const { return combo_; }
 IPieceManager& GameState::getPieces() { return *pieces_; }
 const IPieceManager& GameState::getPieces() const { return *pieces_; }
 
+TimerSystem& GameState::getTimer() { return *timer_; }
+const TimerSystem& GameState::getTimer() const { return *timer_; }
+
+void GameState::setTimerConfig(const TimerConfig& config) {
+    if (timer_) {
+        timer_->setConfig(config);
+    }
+}
+
 Active& GameState::getActivePiece() { return activePiece_; }
 const Active& GameState::getActivePiece() const { return activePiece_; }
 void GameState::setActivePiece(const Active& piece) { activePiece_ = piece; }
@@ -72,7 +87,18 @@ bool GameState::isRunning() const { return running_; }
 bool GameState::isPaused() const { return paused_; }
 bool GameState::isGameOver() const { return gameover_; }
 void GameState::setRunning(bool v) { running_ = v; }
-void GameState::setPaused(bool v) { paused_ = v; }
+void GameState::setPaused(bool v) { 
+    paused_ = v; 
+    
+    // Pause/resume timer accordingly
+    if (timer_) {
+        if (v) {
+            timer_->pause();
+        } else {
+            timer_->resume();
+        }
+    }
+}
 void GameState::setGameOver(bool v) { gameover_ = v; }
 
 Uint32 GameState::getLastTick() const { return lastTick_; }
@@ -86,6 +112,11 @@ void GameState::reset() {
     paused_ = false;
     lastTick_ = SDL_GetTicks();
     resetPieceStats();
+    
+    // Reset timer
+    if (timer_) {
+        timer_->reset();
+    }
 }
 
 void GameState::restartRound() {
@@ -101,6 +132,11 @@ void GameState::restartRound() {
     setLastTick(SDL_GetTicks());
     if (input_) input_->resetTimers();
     if (audio_) static_cast<AudioSystem&>(*audio_).playBeep(520.0, 40, 0.15f, false);
+    
+    // Start timer if enabled
+    if (timer_ && timer_->isEnabled()) {
+        timer_->start();
+    }
 }
 
 void GameState::updatePiece() {
@@ -140,6 +176,11 @@ void GameState::updatePiece() {
             paused_ = false;
             combo_.reset();
             audio_->playGameOverSound();
+            
+            // Parar o timer quando game over
+            if (timer_) {
+                timer_->stop();
+            }
         }
     }
 }
@@ -160,6 +201,23 @@ int GameState::getNextIdx() const { return pieces_->getCurrentNextPiece(); }
 
 void GameState::update(SDL_Renderer* renderer) {
     if (!input_ || !audio_) { DebugLogger::error("Dependencies not initialized in update()"); return; }
+    
+    // Notificar timer sobre estado de pause
+    if (timer_) {
+        timer_->notifyGamePaused(isPaused());
+    }
+    
+    // Update timer (also checks for expiration) - apenas se não estiver pausado nem em game over
+    if (timer_ && !isGameOver() && !isPaused()) {
+        timer_->update();
+        
+        // Check if timer expired and force game over
+        if (timer_->isExpired() && !isGameOver()) {
+            setGameOver(true);
+            timer_->stop();  // Parar o timer quando ele próprio causa game over
+            DebugLogger::info("Game over - timer expired");
+        }
+    }
     
     handleInput(renderer);
     

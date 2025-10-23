@@ -22,6 +22,7 @@ private:
     InputTimingManager::DirectionTimer quitTimer_;
     InputTimingManager::DirectionTimer screenshotTimer_;
     InputTimingManager::DirectionTimer debugTimer_;
+    InputTimingManager::DirectionTimer timerToggleTimer_;
 
     bool isKeyActive(SDL_Scancode key) {
         return keyStates[key];
@@ -78,6 +79,10 @@ public:
     
     bool shouldToggleDebug() { 
         return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_D), debugTimer_); 
+    }
+    
+    bool shouldToggleTimer() override { 
+        return timingManager_.shouldTriggerOnce(isKeyActive(SDL_SCANCODE_T), timerToggleTimer_); 
     }
 
     // Handle SDL events to get clean key press/release (no OS auto-repeat)

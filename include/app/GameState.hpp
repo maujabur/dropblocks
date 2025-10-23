@@ -7,6 +7,7 @@
 #include "app/ScoreSystem.hpp"
 #include "app/ComboSystem.hpp"
 #include "Interfaces.hpp"
+#include "timer/TimerSystem.hpp"
 
 class RenderManager;
 struct LayoutCache;
@@ -23,6 +24,9 @@ private:
     bool gameover_ = false;
     Uint32 lastTick_ = 0;
     std::vector<int> pieceStats_; // contador de cada tipo de peça sorteada
+    
+    // Timer system
+    std::unique_ptr<TimerSystem> timer_;
     
     std::unique_ptr<IAudioSystem> audio_;
     std::unique_ptr<IThemeManager> theme_;
@@ -48,6 +52,10 @@ public:
     const ComboSystem& getCombo() const;
     IPieceManager& getPieces();
     const IPieceManager& getPieces() const;
+    
+    TimerSystem& getTimer();
+    const TimerSystem& getTimer() const;
+    void setTimerConfig(const TimerConfig& config);
     
     Active& getActivePiece();
     const Active& getActivePiece() const;

@@ -44,6 +44,7 @@ public:
     }
     bool shouldScreenshot() override { for (auto& h : handlers) if (h->isConnected() && h->shouldScreenshot()) return true; return false; }
     bool shouldToggleDebug() override { for (auto& h : handlers) if (h->isConnected() && h->shouldToggleDebug()) return true; return false; }
+    bool shouldToggleTimer() override { for (auto& h : handlers) if (h->isConnected() && h->shouldToggleTimer()) return true; return false; }
     void resetTimers() override { auto h = getActiveHandler(); if (h) h->resetTimers(); }
     void cleanup() { quitRequested = false; handlers.clear(); primaryHandler = nullptr; keyboardHandler = nullptr; }
 };

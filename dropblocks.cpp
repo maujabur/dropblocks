@@ -1,18 +1,50 @@
 /**
- * DropBlocks (SDL2)
+ * DropBlocks (SDL2) - VERSION 5.4 - Complete Timer System
+ * =======================================================
+ * 
+ * FEATURES:
  * - Modular architecture: Config, Theme, Audio, Pieces, Render layers, App loop
- * - Visual effects via bridge (no global externs)
+ * - Visual effects via bridge (no global externs)  
  * - Centralized input (quit/pause/restart) via InputManager
  * - Guideline-like rotations (SRS) with fallback pieces
+ * - Countdown Timer System with kiosk mode support:
+ *   * Configurable duration, position, and colors via .cfg
+ *   * Pause integration - timer freezes when game is paused
+ *   * T-key toggle to enable/disable timer completely
+ *   * Visual warnings at 30s and 10s remaining
+ *   * Progress bar with enhanced visibility
+ *   * Rounded borders matching game UI style
+ *   * Game over on timer expiration
+ * - Comprehensive joystick support with analog and button mapping
+ * - Multiple configuration profiles (generic, neon-noir, rainbow, etc.)
+ * - Virtual layout system with AUTO/STRETCH/NATIVE scaling modes
+ * - Piece statistics tracking and display
+ * - Score system with levels and line clearing
+ * - Audio system with SFX and ambient sounds
+ * - Debug overlay with performance metrics
  *
- * Controls
- * - Keyboard: Arrow keys, Z/X/Up, Space, P, Enter, ESC, F12
- * - Joystick: D-pad, A/B/X/Y, Start/Back, analog (deadzone)
+ * CONTROLS:
+ * - Keyboard: Arrow keys, Z/X/Up, Space, P (pause), Enter, ESC, F12, T (timer toggle), R (restart), D (debug)
+ * - Joystick: D-pad, buttons B0/B1/B8/B9, analog sticks (configurable deadzone)
  *
- * Build (example)
- * - g++ dropblocks.cpp -o dropblocks `sdl2-config --cflags --libs` -O2
+ * KIOSK MODE:
+ * - Set TIMER_ENABLED=1 in .cfg file
+ * - Configure TIMER_DURATION_SECONDS for session length
+ * - Position with TIMER_X, TIMER_Y, TIMER_WIDTH, TIMER_HEIGHT
+ * - Customize colors with TIMER_FILL, TIMER_TEXT_COLOR, warning colors
+ *
+ * BUILD:
+ * - g++ -std=c++17 -Wall -Wextra -O2 -I./include dropblocks.cpp src/*.cpp src/app/*.cpp src/audio/*.cpp src/config/*.cpp src/di/*.cpp src/game/*.cpp src/input/*.cpp src/pieces/*.cpp src/render/*.cpp src/timer/*.cpp src/util/*.cpp `pkg-config --cflags --libs sdl2` -o dropblocks
  * 
- * See docs/DEVELOPMENT_NOTES.md for TODOs and future improvements
+ * CHANGELOG v5.4:
+ * - Fixed timer pause functionality - now correctly freezes during game pause
+ * - Improved T-key toggle - completely enables/disables timer visibility
+ * - Enhanced progress bar visibility and thickness
+ * - Removed outline parameters, using fill-only design
+ * - Added comprehensive debug logging for troubleshooting
+ * - Updated virtual layout integration with rounded borders
+ * 
+ * See docs/ for detailed configuration and development notes
  */
 
 // SDL2
@@ -27,6 +59,7 @@
 // Rendering
 #include "render/RenderManager.hpp"
 #include "render/Layers.hpp"
+#include "render/TimerRenderLayer.hpp"
 
 // Input
 #include "input/InputManager.hpp"
@@ -57,9 +90,9 @@
 // ===========================
 //   DEFINIÇÕES DE VERSÃO
 // ===========================
-#define DROPBLOCKS_VERSION "9.1.1"
-#define DROPBLOCKS_BUILD_INFO "Unified DAS/ARR + Debug Toggle Fix"
-#define DROPBLOCKS_FEATURES "Unified Input Timing, Complete Debug System, Joystick Support, 4 Retro Themes"
+#define DROPBLOCKS_VERSION "9.2.4"
+#define DROPBLOCKS_BUILD_INFO "Timer System - Themed Colors Complete"
+#define DROPBLOCKS_FEATURES "Countdown Timer, Complete Themed Colors, Progress Bar Theming, Pause, T-Toggle"
 
 // Math constant (if not defined by system)
 #ifndef M_PI
@@ -155,6 +188,7 @@ int main(int, char**) {
     // Setup rendering pipeline
     RenderManager renderManager(ren);
     renderManager.addLayer(std::make_unique<BackgroundLayer>());
+    renderManager.addLayer(std::make_unique<TimerRenderLayer>());  // Timer layer (early - before game elements)
     renderManager.addLayer(std::make_unique<BannerLayer>());
     renderManager.addLayer(std::make_unique<PieceStatsLayer>());
     renderManager.addLayer(std::make_unique<BoardLayer>());

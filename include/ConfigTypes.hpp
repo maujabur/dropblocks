@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 #include <cstdlib>
+#include <cstdio>
 
 struct RGB { unsigned char r = 0, g = 0, b = 0; };
 
@@ -156,6 +157,103 @@ struct PiecesConfig {
     std::string randomizerType = "simple";
     int randBagSize = 0;
     std::vector<RGB> pieceColors;
+};
+
+struct TimerConfig {
+    bool enabled = false;           // Timer desabilitado por padrão
+    int durationSeconds = 60;       // Duração em segundos (1 min padrão)
+    ElementLayout layout{1420, 20, 180, 60, {0,0,0}, {255,255,255}, {255,255,255}, 180, 0, true}; // Posição e aparência visual (outline alpha = 0)
+    bool showWarningAt30s = true;   // Aviso aos 30 segundos
+    bool showWarningAt10s = true;   // Aviso aos 10 segundos
+    RGB normalColor{255,255,255};   // Cor normal
+    RGB warningColor{255,255,0};    // Cor de aviso
+    RGB criticalColor{255,0,0};     // Cor crítica
+    RGB progressBarBg{40,40,40};    // Cor de fundo da barra de progresso
+    RGB progressBarBorder{80,80,80}; // Cor da borda da barra de progresso
+    
+    // Função helper para carregar configurações do arquivo
+    bool loadFromConfig(const std::string& key, const std::string& value) {
+        if (key == "TIMER_ENABLED") { enabled = (value == "1" || value == "true"); return true; }
+        if (key == "TIMER_DURATION_SECONDS") { 
+            int v = std::atoi(value.c_str());
+            if (v > 0 && v <= 7200) { durationSeconds = v; return true; } // Max 2 horas
+        }
+        if (key == "TIMER_SHOW_WARNING_AT_30S") { showWarningAt30s = (value == "1" || value == "true"); return true; }
+        if (key == "TIMER_SHOW_WARNING_AT_10S") { showWarningAt10s = (value == "1" || value == "true"); return true; }
+        
+        // Layout properties
+        if (key == "TIMER_X") { layout.x = std::atoi(value.c_str()); return true; }
+        if (key == "TIMER_Y") { layout.y = std::atoi(value.c_str()); return true; }
+        if (key == "TIMER_WIDTH") { layout.width = std::atoi(value.c_str()); return true; }
+        if (key == "TIMER_HEIGHT") { layout.height = std::atoi(value.c_str()); return true; }
+        
+        // Parse color values (format: #RRGGBB)
+        if (key == "TIMER_FILL") {
+            if (value.length() == 7 && value[0] == '#') {
+                unsigned int r, g, b;
+                if (sscanf(value.c_str(), "#%02x%02x%02x", &r, &g, &b) == 3) {
+                    layout.backgroundColor = {(unsigned char)r, (unsigned char)g, (unsigned char)b};
+                    return true;
+                }
+            }
+        }
+        if (key == "TIMER_TEXT_COLOR") {
+            if (value.length() == 7 && value[0] == '#') {
+                unsigned int r, g, b;
+                if (sscanf(value.c_str(), "#%02x%02x%02x", &r, &g, &b) == 3) {
+                    normalColor = {(unsigned char)r, (unsigned char)g, (unsigned char)b};
+                    return true;
+                }
+            }
+        }
+        if (key == "TIMER_WARNING_COLOR") {
+            if (value.length() == 7 && value[0] == '#') {
+                unsigned int r, g, b;
+                if (sscanf(value.c_str(), "#%02x%02x%02x", &r, &g, &b) == 3) {
+                    warningColor = {(unsigned char)r, (unsigned char)g, (unsigned char)b};
+                    return true;
+                }
+            }
+        }
+        if (key == "TIMER_CRITICAL_COLOR") {
+            if (value.length() == 7 && value[0] == '#') {
+                unsigned int r, g, b;
+                if (sscanf(value.c_str(), "#%02x%02x%02x", &r, &g, &b) == 3) {
+                    criticalColor = {(unsigned char)r, (unsigned char)g, (unsigned char)b};
+                    return true;
+                }
+            }
+        }
+        if (key == "TIMER_PROGRESS_BG") {
+            if (value.length() == 7 && value[0] == '#') {
+                unsigned int r, g, b;
+                if (sscanf(value.c_str(), "#%02x%02x%02x", &r, &g, &b) == 3) {
+                    progressBarBg = {(unsigned char)r, (unsigned char)g, (unsigned char)b};
+                    return true;
+                }
+            }
+        }
+        if (key == "TIMER_PROGRESS_BORDER") {
+            if (value.length() == 7 && value[0] == '#') {
+                unsigned int r, g, b;
+                if (sscanf(value.c_str(), "#%02x%02x%02x", &r, &g, &b) == 3) {
+                    progressBarBorder = {(unsigned char)r, (unsigned char)g, (unsigned char)b};
+                    return true;
+                }
+            }
+        }
+        
+        // Alpha values
+        if (key == "TIMER_BG_ALPHA") { 
+            int v = std::atoi(value.c_str());
+            if (v >= 0 && v <= 255) { layout.backgroundAlpha = (unsigned char)v; return true; }
+        }
+        
+        // Layout enabled
+        if (key == "TIMER_LAYOUT_ENABLED") { layout.enabled = (value == "1" || value == "true"); return true; }
+        
+        return false;
+    }
 };
 
 struct GameConfig { int tickMsStart = 400; int tickMsMin = 80; int speedAcceleration = 50; int levelStep = 10; };

@@ -8,6 +8,7 @@ class AudioSystem;
 class JoystickSystem;
 class ThemeManager;
 class PieceManager;
+struct TimerConfig;
 
 /**
  * @brief Configuration processing utilities
@@ -56,6 +57,11 @@ bool processAudioConfigs(const std::string& key, const std::string& val, int& pr
  * @brief Process joystick configuration keys
  */
 bool processJoystickConfigs(const std::string& key, const std::string& val, int& processedLines, JoystickSystem& joystick, PieceManager& pieceManager);
+
+/**
+ * @brief Process timer configuration keys
+ */
+bool processTimerConfigs(const std::string& key, const std::string& val, int& processedLines, TimerConfig& timerConfig);
 
 } // namespace ConfigProcessors
 

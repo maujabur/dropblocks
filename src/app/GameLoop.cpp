@@ -1,4 +1,5 @@
 #include "app/GameLoop.hpp"
+#include "app/GameState.hpp"
 #include "render/LayoutCache.hpp"
 #include "render/TextureCache.hpp"
 #include "DebugOverlay.hpp"
@@ -11,7 +12,6 @@
 #include "render/RenderManager.hpp"
 #include "render/GameStateBridge.hpp"
 
-class GameState; // defined in main TU
 extern ThemeManager themeManager;
 
 void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer* ren, ConfigManager& configManager, InputManager& inputManager) {
@@ -80,6 +80,11 @@ void GameLoop::run(GameState& state, RenderManager& renderManager, SDL_Renderer*
         // Check for debug toggle input
         if (inputManager.shouldToggleDebug()) {
             debugOverlay.toggle();
+        }
+        
+        // Check for timer toggle input
+        if (inputManager.shouldToggleTimer()) {
+            state.getTimer().toggle();
         }
         
         db_render(state, renderManager, layoutCache);

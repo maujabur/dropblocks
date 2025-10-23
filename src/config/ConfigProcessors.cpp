@@ -354,5 +354,13 @@ bool processJoystickConfigs(const std::string& key, const std::string& val, int&
     return false;
 }
 
+bool processTimerConfigs(const std::string& key, const std::string& val, int& processedLines, TimerConfig& timerConfig) {
+    if (timerConfig.loadFromConfig(key, val)) {
+        processedLines++;
+        return true;
+    }
+    return false;
+}
+
 } // namespace ConfigProcessors
 

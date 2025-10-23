@@ -29,6 +29,7 @@ public:
     bool shouldQuit() override;
     bool shouldScreenshot() override;
     bool shouldToggleDebug() override;
+    bool shouldToggleTimer() override;
     
     void update() override;
     bool isConnected() override;

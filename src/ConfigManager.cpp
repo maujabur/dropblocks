@@ -341,6 +341,29 @@ bool LayoutConfigParser::parse(const std::string& key, const std::string& value)
     return false;
 }
 
+class TimerConfigParser : public ConfigParser {
+private:
+    TimerConfig& config_;
+    int parseInt(const std::string& value) const { return std::atoi(value.c_str()); }
+    bool parseHexColor(const std::string& value, RGB& color) const {
+        std::string hex = value; if (hex.size() && hex[0] == '#') hex = hex.substr(1);
+        if (hex.length() != 6) return false;
+        try {
+            unsigned long val = std::stoul(hex, nullptr, 16);
+            color.r = (unsigned char)((val >> 16) & 0xFF);
+            color.g = (unsigned char)((val >> 8) & 0xFF);
+            color.b = (unsigned char)(val & 0xFF);
+            return true;
+        } catch (...) { return false; }
+    }
+    bool parseBool(const std::string& value) const { return (value == "1" || value == "true" || value == "TRUE"); }
+public:
+    TimerConfigParser(TimerConfig& config) : config_(config) {}
+    bool parse(const std::string& key, const std::string& value) override { return config_.loadFromConfig(key, value); }
+    std::string getCategory() const override { return "timer"; }
+    bool validate() const override { return (config_.durationSeconds > 0 && config_.durationSeconds <= 7200); }
+};
+
 // ---- ConfigManager impl ----
 static void trim(std::string& s) {
     if (s.empty()) return;
@@ -362,7 +385,8 @@ bool ConfigManager::loadFromFile(const std::string& path) {
     PiecesConfigParser piecesParser(pieces_);
     GameConfigParser gameParser(game_);
     LayoutConfigParser layoutParser(layout_);
-    std::vector<ConfigParser*> parsers = {&visualParser, &audioParser, &inputParser, &piecesParser, &gameParser, &layoutParser};
+    TimerConfigParser timerParser(timer_);
+    std::vector<ConfigParser*> parsers = {&visualParser, &audioParser, &inputParser, &piecesParser, &gameParser, &layoutParser, &timerParser};
 
     std::string line; while (std::getline(file, line)) {
         // Remove comments (# preceded by whitespace or at start of line)

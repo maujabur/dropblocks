@@ -15,6 +15,7 @@ private:
     PiecesConfig pieces_;
     GameConfig game_;
     LayoutConfig layout_;
+    TimerConfig timer_;
 
     std::vector<std::string> configPaths_;
     std::map<std::string, std::string> overrides_;
@@ -38,6 +39,8 @@ public:
     InputConfig& getInput() { return input_; }
     PiecesConfig& getPieces() { return pieces_; }
     GameConfig& getGame() { return game_; }
+    TimerConfig& getTimer() { return timer_; }
+    const TimerConfig& getTimer() const { return timer_; }
 
     // Loading methods
     bool loadFromFile(const std::string& path) override;

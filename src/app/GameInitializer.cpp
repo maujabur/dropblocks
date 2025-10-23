@@ -183,6 +183,9 @@ bool initializeGame(GameState& state, AudioSystem& audio, ConfigManager& configM
     ConfigApplicator::applyConfigToTheme(configManager.getVisual(), themeManager, g_visualView);
     ConfigApplicator::applyConfigToGame(state, configManager.getGame());
     ConfigApplicator::applyConfigToPieces(configManager.getPieces(), themeManager);
+    
+    // Apply timer configuration
+    state.setTimerConfig(configManager.getTimer());
     ConfigApplicator::applyConfigToLayout(configManager.getLayout());
     
     // Apply joystick configuration to InputManager
@@ -228,6 +231,11 @@ void initializeRandomizer(GameState& state) {
     
     // Incrementar estatísticas para a primeira peça
     state.incrementPieceStat(firstPiece);
+    
+    // Start timer if enabled (fix: timer not starting on first game)
+    if (state.getTimer().isEnabled()) {
+        state.getTimer().start();
+    }
     
     // Set the next piece
     state.getPieces().setNextPiece(state.getPieces().getNextPiece());
